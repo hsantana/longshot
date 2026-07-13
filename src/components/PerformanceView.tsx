@@ -31,12 +31,14 @@ function TrendTile({
   label,
   hint,
   value,
+  valueClass = "",
   trend,
   formatValue,
 }: {
   label: string;
   hint: string;
   value: string;
+  valueClass?: string;
   trend: TrendPoint[];
   formatValue: (v: number) => string;
 }) {
@@ -47,7 +49,7 @@ function TrendTile({
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
             {label}
           </p>
-          <p className="mt-1.5 text-2xl font-semibold tabular-nums">{value}</p>
+          <p className={`mt-1.5 text-2xl font-semibold tabular-nums ${valueClass}`}>{value}</p>
           <p className="mt-0.5 text-xs text-zinc-400">{hint}</p>
         </div>
         <div className="w-32 shrink-0 pt-2 sm:w-40">
@@ -112,6 +114,7 @@ export default function PerformanceView({
             label="Return per $1"
             hint="Total returned ÷ total staked"
             value={rr === null ? "—" : `$${rr.toFixed(2)}`}
+            valueClass={rr !== null && rr < 1 ? "text-rose-500" : ""}
             trend={rrTrend}
             formatValue={(v) => `$${v.toFixed(2)}`}
           />

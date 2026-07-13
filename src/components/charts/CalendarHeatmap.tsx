@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { DayCell } from "@/lib/analytics";
 import { formatSignedUsd } from "@/lib/format";
+import { useContainerWidth } from "./useContainerWidth";
 
 interface Props {
   days: Map<string, DayCell>;
@@ -11,9 +12,9 @@ interface Props {
   nowSec: number;
 }
 
-const CELL = 12;
 const GAP = 3;
 const MAX_WEEKS = 53;
+const LABEL_W = 28;
 
 // Color priority per spec: resolved PnL (diverging, 3 shades/arm by tercile)
 // beats opened-only gray; no activity = near-blank.
@@ -34,8 +35,17 @@ function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+interface HoverState {
+  cell: DayCell | null;
+  date: string;
+  /** Viewport coordinates (tooltip is position:fixed so it can't be clipped). */
+  clientX: number;
+  clientY: number;
+}
+
 export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
-  const [hover, setHover] = useState<{ cell: DayCell | null; date: string; x: number; y: number } | null>(null);
+  const [containerRef, measuredWidth] = useContainerWidth<HTMLDivElement>();
+  const [hover, setHover] = useState<HoverState | null>(null);
 
   const end = new Date(nowSec * 1000);
   end.setUTCHours(0, 0, 0, 0);
@@ -43,6 +53,32 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
   start.setUTCHours(0, 0, 0, 0);
   // Align to Sunday so columns are calendar weeks.
   start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+
+  const columns: { date: Date; key: string }[][] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    const col: { date: Date; key: string }[] = [];
+    for (let i = 0; i < 7 && cursor <= end; i++) {
+      col.push({ date: new Date(cursor), key: isoDay(cursor) });
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    columns.push(col);
+  }
+
+  // Cell size adapts to the window: few weeks → big cells filling the card,
+  // a year → small cells, still fitting without dead space.
+  const available = (measuredWidth || 560) - LABEL_W;
+  const cell = Math.max(10, Math.min(26, Math.floor(available / columns.length) - GAP));
+
+  const width = LABEL_W + columns.length * (cell + GAP);
+  const height = 7 * (cell + GAP) + 18;
+  const monthFmt = new Intl.DateTimeFormat("en-US", { month: "short" });
+  const dateFmt = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 
   // Terciles of |net| among days with resolutions, within the visible window.
   const startKey = isoDay(start);
@@ -58,90 +94,73 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
     return net >= 0 ? POS[i] : NEG[i];
   };
 
-  const columns: { date: Date; key: string }[][] = [];
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    const col: { date: Date; key: string }[] = [];
-    for (let i = 0; i < 7 && cursor <= end; i++) {
-      col.push({ date: new Date(cursor), key: isoDay(cursor) });
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
-    }
-    columns.push(col);
-  }
-
-  const width = columns.length * (CELL + GAP) + 28;
-  const height = 7 * (CELL + GAP) + 18;
-  const monthFmt = new Intl.DateTimeFormat("en-US", { month: "short" });
-  const dateFmt = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-
   let lastMonth = -1;
 
   return (
-    <div className="relative overflow-x-auto">
-      <svg width={width} height={height} className="block">
-        {["Mon", "Wed", "Fri"].map((label, i) => (
-          <text
-            key={label}
-            x={0}
-            y={18 + (1 + i * 2) * (CELL + GAP) + CELL - 3}
-            className="fill-zinc-400 text-[10px]"
-          >
-            {label[0]}
-          </text>
-        ))}
-        {columns.map((col, ci) => {
-          const month = col[0].date.getUTCMonth();
-          const showMonth = month !== lastMonth;
-          lastMonth = month;
-          return (
-            <g key={ci} transform={`translate(${28 + ci * (CELL + GAP)},0)`}>
-              {showMonth && ci < columns.length - 1 && (
-                <text x={0} y={10} className="fill-zinc-400 text-[10px]">
-                  {monthFmt.format(col[0].date)}
-                </text>
-              )}
-              {col.map((day) => {
-                const cell = days.get(day.key);
-                const resolved = cell && (cell.wins > 0 || cell.losses > 0);
-                const cls = resolved
-                  ? shade(cell.net)
-                  : cell && cell.opened > 0
-                    ? OPENED
-                    : EMPTY;
-                return (
-                  <rect
-                    key={day.key}
-                    x={0}
-                    y={18 + day.date.getUTCDay() * (CELL + GAP)}
-                    width={CELL}
-                    height={CELL}
-                    rx={3}
-                    className={cls}
-                    onMouseEnter={() =>
-                      setHover({
-                        cell: cell ?? null,
-                        date: dateFmt.format(day.date),
-                        x: 28 + ci * (CELL + GAP),
-                        y: 18 + day.date.getUTCDay() * (CELL + GAP),
-                      })
-                    }
-                    onMouseLeave={() => setHover(null)}
-                  />
-                );
-              })}
-            </g>
-          );
-        })}
-      </svg>
+    <div ref={containerRef} className="relative">
+      {measuredWidth > 0 && (
+        <div className="overflow-x-auto">
+          <svg width={width} height={height} className="block">
+            {["Mon", "Wed", "Fri"].map((label, i) => (
+              <text
+                key={label}
+                x={0}
+                y={18 + (1 + i * 2) * (cell + GAP) + cell - 3}
+                className="fill-zinc-400 text-[10px]"
+              >
+                {label[0]}
+              </text>
+            ))}
+            {columns.map((col, ci) => {
+              const month = col[0].date.getUTCMonth();
+              const showMonth = month !== lastMonth;
+              lastMonth = month;
+              return (
+                <g key={ci} transform={`translate(${LABEL_W + ci * (cell + GAP)},0)`}>
+                  {showMonth && (
+                    <text x={0} y={10} className="fill-zinc-400 text-[10px]">
+                      {monthFmt.format(col[0].date)}
+                    </text>
+                  )}
+                  {col.map((day) => {
+                    const c = days.get(day.key);
+                    const resolved = c && (c.wins > 0 || c.losses > 0);
+                    const cls = resolved
+                      ? shade(c.net)
+                      : c && c.opened > 0
+                        ? OPENED
+                        : EMPTY;
+                    return (
+                      <rect
+                        key={day.key}
+                        x={0}
+                        y={18 + day.date.getUTCDay() * (cell + GAP)}
+                        width={cell}
+                        height={cell}
+                        rx={Math.min(4, cell / 4)}
+                        className={cls}
+                        onMouseEnter={(e) =>
+                          setHover({
+                            cell: c ?? null,
+                            date: dateFmt.format(day.date),
+                            clientX: e.clientX,
+                            clientY: e.clientY,
+                          })
+                        }
+                        onMouseLeave={() => setHover(null)}
+                      />
+                    );
+                  })}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
       {hover && (
         <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs shadow-md dark:border-zinc-700 dark:bg-zinc-800"
-          style={{ left: hover.x + CELL / 2, top: hover.y - 6 }}
+          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs shadow-md dark:border-zinc-700 dark:bg-zinc-800"
+          style={{ left: hover.clientX, top: hover.clientY - 10 }}
         >
           <p className="font-medium">{hover.date}</p>
           {hover.cell ? (

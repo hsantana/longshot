@@ -57,43 +57,43 @@ export default async function TrackerLayout({
           </p>
         </div>
       ) : (
-        <>
-          <section className="mt-8 flex items-center gap-4">
-            {account.summary.profileImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={account.summary.profileImage}
-                alt=""
-                className="h-14 w-14 rounded-full object-cover"
-              />
-            ) : (
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-200 text-xl font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
-                {(account.summary.name ?? account.summary.address)
-                  .replace(/^0x/, "")
-                  .slice(0, 1)
-                  .toUpperCase()}
-              </span>
-            )}
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                {account.summary.name ?? shortAddress(account.summary.address)}
-              </h1>
-              <a
-                href={`https://polymarket.com/profile/${account.summary.address}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-xs text-zinc-400 hover:underline"
-              >
-                {account.summary.address}
-              </a>
-            </div>
-          </section>
+        <div className="mt-8 lg:grid lg:grid-cols-[150px_minmax(0,1fr)] lg:items-start lg:gap-8">
+          <TabNav handle={handle} />
+          <div className="mt-6 lg:mt-0">
+            <section className="flex items-center gap-4">
+              {account.summary.profileImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={account.summary.profileImage}
+                  alt=""
+                  className="h-14 w-14 rounded-full object-cover"
+                />
+              ) : (
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-200 text-xl font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+                  {(account.summary.name ?? account.summary.address)
+                    .replace(/^0x/, "")
+                    .slice(0, 1)
+                    .toUpperCase()}
+                </span>
+              )}
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">
+                  {account.summary.name ?? shortAddress(account.summary.address)}
+                </h1>
+                <a
+                  href={`https://polymarket.com/profile/${account.summary.address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs text-zinc-400 hover:underline"
+                >
+                  {account.summary.address}
+                </a>
+              </div>
+            </section>
 
-          <div className="mt-6 lg:grid lg:grid-cols-[150px_minmax(0,1fr)] lg:items-start lg:gap-8">
-            <TabNav handle={handle} />
-            <div className="mt-6 lg:mt-0">{children}</div>
+            <div className="mt-6">{children}</div>
           </div>
-        </>
+        </div>
       )}
     </main>
   );

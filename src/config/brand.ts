@@ -14,4 +14,6 @@ export const BRAND = {
     "Performance tracker for Polymarket traders. Look up any account's open positions, closed positions, and PnL.",
   /** Source repository shown in the footer/home page. */
   repoUrl: "https://github.com/hsantana/longshot",
+  /** Creator credit shown in the global footer. */
+  creator: "Campo Base Labs SL",
 } as const;

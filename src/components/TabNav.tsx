@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { segment: "", label: "Performance" },
-  { segment: "style", label: "Style" },
   { segment: "portfolio", label: "Portfolio" },
+  { segment: "style", label: "Style" },
 ];
 
 export default function TabNav({ handle }: { handle: string }) {
