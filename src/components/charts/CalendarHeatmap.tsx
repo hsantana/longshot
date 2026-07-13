@@ -66,9 +66,11 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
   }
 
   // Cell size adapts to the window: few weeks → big cells filling the card,
-  // a year → small cells, still fitting without dead space.
+  // a year → small cells, still fitting without dead space. Capped at 48px so
+  // short windows don't produce an absurdly tall 7-row grid; the grid is then
+  // centered so any leftover width reads as intentional margin, not dead space.
   const available = (measuredWidth || 560) - LABEL_W;
-  const cell = Math.max(10, Math.min(26, Math.floor(available / columns.length) - GAP));
+  const cell = Math.max(10, Math.min(48, Math.floor(available / columns.length) - GAP));
 
   const width = LABEL_W + columns.length * (cell + GAP);
   const height = 7 * (cell + GAP) + 18;
@@ -100,7 +102,7 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
     <div ref={containerRef} className="relative">
       {measuredWidth > 0 && (
         <div className="overflow-x-auto">
-          <svg width={width} height={height} className="block">
+          <svg width={width} height={height} className="mx-auto block">
             {["Mon", "Wed", "Fri"].map((label, i) => (
               <text
                 key={label}

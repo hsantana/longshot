@@ -88,13 +88,19 @@ export default function LineChart({
     : { top: 10, right: 10, bottom: 22, left: 58 };
   const H = height ?? (spark ? 44 : 200);
 
+  // Always keep the measured container mounted (even when empty) so the
+  // ResizeObserver stays attached — otherwise switching away from and back to
+  // a state with data leaves measuredWidth stale/zero and the chart blank.
   if (data.length === 0) {
-    return spark ? (
-      <div style={{ height: H }} />
-    ) : (
-      <p className="flex items-center justify-center py-12 text-sm text-zinc-400">
-        No closed plays in this window.
-      </p>
+    return (
+      <div ref={containerRef}>
+        {!spark && (
+          <p className="flex items-center justify-center py-12 text-sm text-zinc-400">
+            No closed plays in this window.
+          </p>
+        )}
+        {spark && <div style={{ height: H }} />}
+      </div>
     );
   }
 

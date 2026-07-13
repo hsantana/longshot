@@ -1,27 +1,32 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 /**
  * Measure the rendered width of a container so SVG charts draw at real pixel
  * size instead of scaling a fixed viewBox (which distorts font sizes).
+ *
+ * Uses a callback ref so the ResizeObserver re-attaches whenever the measured
+ * node mounts — important because charts swap the container node between empty
+ * and populated states, and a one-shot effect would leave the observer stale
+ * (blank chart after toggling back to a state that has data).
  */
 export function useContainerWidth<T extends HTMLElement>(): [
-  React.RefObject<T | null>,
+  (node: T | null) => void,
   number,
 ] {
-  const ref = useRef<T>(null);
   const [width, setWidth] = useState(0);
+  const observerRef = useRef<ResizeObserver | null>(null);
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+  const ref = useCallback((node: T | null) => {
+    observerRef.current?.disconnect();
+    if (!node) return;
     const observer = new ResizeObserver((entries) => {
       setWidth(entries[0].contentRect.width);
     });
-    observer.observe(el);
-    setWidth(el.getBoundingClientRect().width);
-    return () => observer.disconnect();
+    observer.observe(node);
+    observerRef.current = observer;
+    setWidth(node.getBoundingClientRect().width);
   }, []);
 
   return [ref, width];
