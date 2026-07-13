@@ -1,9 +1,9 @@
-import PerformanceView from "@/components/PerformanceView";
+import StyleView from "@/components/StyleView";
 import { getDashboard } from "@/lib/dashboard";
 
 export const dynamic = "force-dynamic";
 
-export default async function PerformancePage({
+export default async function StylePage({
   params,
 }: {
   params: Promise<{ handle: string }>;
@@ -17,12 +17,5 @@ export default async function PerformancePage({
   }
   if (!dashboard) return null; // layout renders the error state
 
-  return (
-    <PerformanceView
-      plays={dashboard.plays}
-      trades={dashboard.trades}
-      categories={dashboard.categories}
-      truncated={dashboard.truncated}
-    />
-  );
+  return <StyleView plays={dashboard.plays} categories={dashboard.categories} />;
 }

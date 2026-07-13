@@ -1,6 +1,8 @@
 // Thin client over Polymarket's public read-only APIs.
 // No API key required. Endpoint shapes verified 2026-07.
 
+import { cache } from "react";
+
 const DATA_API = "https://data-api.polymarket.com";
 const GAMMA_API = "https://gamma-api.polymarket.com";
 const LB_API = "https://lb-api.polymarket.com";
@@ -65,6 +67,19 @@ export interface AccountSummary {
   unrealizedPnl: number;
 }
 
+export interface Trade {
+  side: "BUY" | "SELL";
+  usdcSize: number;
+  size: number;
+  price: number;
+  timestamp: number;
+  conditionId: string;
+  outcomeIndex: number;
+  outcome: string;
+  title: string;
+  eventSlug: string;
+}
+
 export function isAddress(s: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(s.trim());
 }
@@ -106,9 +121,146 @@ export async function getOpenPositions(address: string): Promise<OpenPosition[]>
   return getJSON<OpenPosition[]>(url);
 }
 
-export async function getClosedPositions(address: string): Promise<ClosedPosition[]> {
-  const url = `${DATA_API}/closed-positions?user=${address}&limit=100&sortBy=TIMESTAMP&sortDirection=DESC`;
-  return getJSON<ClosedPosition[]>(url);
+// The endpoint caps at 50 rows per page; fetch up to `cap` in parallel pages.
+export async function getClosedPositions(
+  address: string,
+  cap = 500
+): Promise<ClosedPosition[]> {
+  const pageSize = 50;
+  const offsets = Array.from(
+    { length: Math.ceil(cap / pageSize) },
+    (_, i) => i * pageSize
+  );
+  const pages = await Promise.all(
+    offsets.map((offset) =>
+      getJSON<ClosedPosition[]>(
+        `${DATA_API}/closed-positions?user=${address}&limit=${pageSize}&offset=${offset}&sortBy=TIMESTAMP&sortDirection=DESC`
+      ).catch(() => [] as ClosedPosition[])
+    )
+  );
+  return pages.flat();
+}
+
+/** Trade history (most recent first), paged up to `cap` trades. */
+export async function getTrades(address: string, cap = 3000): Promise<Trade[]> {
+  const pageSize = 500;
+  const trades: Trade[] = [];
+  for (let offset = 0; offset < cap; offset += pageSize) {
+    const page = await getJSON<Trade[]>(
+      `${DATA_API}/activity?user=${address}&type=TRADE&limit=${pageSize}&offset=${offset}&sortBy=TIMESTAMP&sortDirection=DESC`
+    ).catch(() => [] as Trade[]);
+    trades.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return trades;
+}
+
+const USDC_CONTRACTS = [
+  "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", // USDC.e (Polymarket collateral)
+  "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", // native USDC
+];
+const POLYGON_RPC = "https://polygon-rpc.com";
+
+/** Wallet USDC balance ("Cash") read from the Polygon chain. Null when the RPC fails. */
+export async function getUsdcBalance(address: string): Promise<number | null> {
+  try {
+    const balances = await Promise.all(
+      USDC_CONTRACTS.map(async (contract) => {
+        const res = await fetch(POLYGON_RPC, {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_call",
+            params: [
+              {
+                to: contract,
+                data: `0x70a08231${address.slice(2).padStart(64, "0")}`,
+              },
+              "latest",
+            ],
+          }),
+        });
+        const data = (await res.json()) as { result?: string };
+        return data.result ? parseInt(data.result, 16) / 1e6 : 0;
+      })
+    );
+    return balances.reduce((a, b) => a + b, 0);
+  } catch {
+    return null;
+  }
+}
+
+// Polymarket models "category" as event tags; match against the site's
+// top-level categories, first hit wins.
+const CANONICAL_CATEGORIES = [
+  "Politics",
+  "Elections",
+  "Geopolitics",
+  "Sports",
+  "Esports",
+  "Crypto",
+  "Finance",
+  "Business",
+  "Economy",
+  "Earnings",
+  "Tech",
+  "Science",
+  "AI",
+  "Culture",
+  "Pop Culture",
+  "Entertainment",
+  "Music",
+  "Movies",
+  "Weather",
+  "World",
+  "Health",
+];
+
+// Per-isolate cache: event slug -> category. Event tags are effectively
+// immutable, so entries never need invalidating.
+const categoryCache = new Map<string, string>();
+
+/**
+ * Resolve event slugs to a top-level category via the Gamma events endpoint.
+ * Bounded: at most `maxSlugs` uncached slugs are fetched (chunks of 20);
+ * anything beyond that maps to "Other".
+ */
+export async function getCategories(
+  eventSlugs: string[],
+  maxSlugs = 60
+): Promise<Map<string, string>> {
+  const unique = [...new Set(eventSlugs)];
+  const missing = unique.filter((s) => !categoryCache.has(s)).slice(0, maxSlugs);
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < missing.length; i += 20) chunks.push(missing.slice(i, i + 20));
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const qs = chunk.map((s) => `slug=${encodeURIComponent(s)}`).join("&");
+      try {
+        const events = await getJSON<
+          { slug: string; tags?: { label: string }[] }[]
+        >(`${GAMMA_API}/events?${qs}`);
+        for (const ev of events) {
+          const labels = (ev.tags ?? []).map((t) => t.label);
+          const match = CANONICAL_CATEGORIES.find((c) => labels.includes(c));
+          categoryCache.set(ev.slug, match ?? "Other");
+        }
+      } catch {
+        // leave uncached; they'll fall through to "Other" below
+      }
+    })
+  );
+
+  const result = new Map<string, string>();
+  for (const slug of unique) {
+    result.set(slug, categoryCache.get(slug) ?? "Other");
+  }
+  return result;
 }
 
 export async function getPortfolioValue(address: string): Promise<number> {
@@ -128,7 +280,7 @@ export async function getProfitProfile(
   return data[0] ?? null;
 }
 
-export async function getAccount(handle: string): Promise<
+async function getAccountUncached(handle: string): Promise<
   | {
       summary: AccountSummary;
       openPositions: OpenPosition[];
@@ -136,7 +288,7 @@ export async function getAccount(handle: string): Promise<
     }
   | null
 > {
-  const resolved = await resolveHandle(handle);
+  const resolved = await cachedResolveHandle(handle);
   if (!resolved) return null;
   const { address } = resolved;
 
@@ -170,7 +322,13 @@ export async function getAccount(handle: string): Promise<
       outcome: p.outcome,
       outcomeIndex: p.outcomeIndex,
       endDate: p.endDate,
-      timestamp: Math.floor(Date.parse(p.endDate) / 1000) || 0,
+      // The API doesn't say when the market resolved; the event's endDate can
+      // even be in the future (early resolution inside a negative-risk event),
+      // so cap at now to keep these out of the future on charts.
+      timestamp: Math.min(
+        Math.floor(Date.parse(p.endDate) / 1000) || 0,
+        Math.floor(Date.now() / 1000)
+      ),
       claimable: p.currentValue > 0,
     }));
 
@@ -193,3 +351,10 @@ export async function getAccount(handle: string): Promise<
     closedPositions,
   };
 }
+
+// React request-level cache: layout and page(s) in the same request share one
+// fetch of the underlying data.
+export const cachedResolveHandle = cache(resolveHandle);
+export const getAccount = cache(getAccountUncached);
+export const cachedGetTrades = cache(getTrades);
+export const cachedGetUsdcBalance = cache(getUsdcBalance);

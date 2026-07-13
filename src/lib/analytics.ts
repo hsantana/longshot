@@ -1,0 +1,300 @@
+// Pure derivations for the Performance and Style views. No fetching here —
+// everything operates on plays (closed positions) and trades passed in,
+// both already enriched with their category server-side.
+
+import type { ClosedPosition, Trade } from "./polymarket";
+
+/** A play = a closed position, enriched with its category. */
+export interface Play {
+  title: string;
+  eventSlug: string;
+  outcome: string;
+  /** Average entry price = probability at entry (0..1). */
+  entryPrice: number;
+  /** Dollars staked. */
+  staked: number;
+  /** Realized PnL. */
+  pnl: number;
+  /** Dollars returned = staked + pnl. */
+  returned: number;
+  /** Close/resolution time (unix seconds). */
+  ts: number;
+  category: string;
+}
+
+/** Slimmed trade passed to the client (full Trade objects are heavy at 3k rows). */
+export interface TradeLite {
+  ts: number;
+  side: "BUY" | "SELL";
+  usd: number;
+  price: number;
+  outcome: string;
+  category: string;
+}
+
+export const BANDS = [
+  { key: "longshot", label: "Longshot", range: "0–5%", min: 0, max: 0.05 },
+  { key: "low", label: "Low", range: "5–25%", min: 0.05, max: 0.25 },
+  { key: "medium", label: "Medium", range: "25–50%", min: 0.25, max: 0.5 },
+  { key: "medhigh", label: "Medium-high", range: "50–75%", min: 0.5, max: 0.75 },
+  { key: "high", label: "High", range: "75–95%", min: 0.75, max: 0.95 },
+  { key: "nearlock", label: "Near-lock", range: "95–100%", min: 0.95, max: 1.01 },
+] as const;
+
+export type BandKey = (typeof BANDS)[number]["key"];
+
+export function bandOf(price: number): BandKey {
+  const band = BANDS.find((b) => price >= b.min && price < b.max);
+  return (band ?? BANDS[BANDS.length - 1]).key;
+}
+
+export const DATE_PRESETS = [
+  { key: "7", label: "7D", days: 7 },
+  { key: "30", label: "30D", days: 30 },
+  { key: "90", label: "90D", days: 90 },
+  { key: "365", label: "1Y", days: 365 },
+  { key: "all", label: "All", days: null },
+] as const;
+
+export type DateKey = (typeof DATE_PRESETS)[number]["key"];
+
+export interface Filters {
+  category: string; // "all" or a category name
+  dateKey: DateKey;
+  bands: BandKey[]; // empty = all bands
+  side: "both" | "yes" | "no";
+}
+
+export const DEFAULT_FILTERS: Filters = {
+  category: "all",
+  dateKey: "30",
+  bands: [],
+  side: "both",
+};
+
+export function toPlays(
+  closed: ClosedPosition[],
+  categories: Map<string, string>
+): Play[] {
+  return closed.map((p) => {
+    const staked = p.totalBought * p.avgPrice;
+    return {
+      title: p.title,
+      eventSlug: p.eventSlug,
+      outcome: p.outcome,
+      entryPrice: p.avgPrice,
+      staked,
+      pnl: p.realizedPnl,
+      returned: staked + p.realizedPnl,
+      ts: p.timestamp,
+      category: categories.get(p.eventSlug) ?? "Other",
+    };
+  });
+}
+
+export function toTradeLites(
+  trades: Trade[],
+  categories: Map<string, string>
+): TradeLite[] {
+  return trades.map((t) => ({
+    ts: t.timestamp,
+    side: t.side,
+    usd: t.usdcSize,
+    price: t.price,
+    outcome: t.outcome,
+    category: categories.get(t.eventSlug) ?? "Other",
+  }));
+}
+
+export function windowStart(dateKey: DateKey, nowSec: number): number {
+  const preset = DATE_PRESETS.find((p) => p.key === dateKey);
+  return preset?.days ? nowSec - preset.days * 86400 : 0;
+}
+
+function sideMatches(side: Filters["side"], outcome: string): boolean {
+  if (side === "both") return true;
+  const o = outcome.toLowerCase();
+  return side === "yes" ? o !== "no" : o === "no";
+}
+
+export function filterPlays(plays: Play[], filters: Filters, nowSec: number): Play[] {
+  const start = windowStart(filters.dateKey, nowSec);
+  return plays.filter(
+    (p) =>
+      p.ts >= start &&
+      (filters.category === "all" || p.category === filters.category) &&
+      (filters.bands.length === 0 || filters.bands.includes(bandOf(p.entryPrice))) &&
+      sideMatches(filters.side, p.outcome)
+  );
+}
+
+export function filterTrades(
+  trades: TradeLite[],
+  filters: Filters,
+  nowSec: number
+): TradeLite[] {
+  const start = windowStart(filters.dateKey, nowSec);
+  return trades.filter(
+    (t) =>
+      t.ts >= start &&
+      (filters.category === "all" || t.category === filters.category) &&
+      (filters.bands.length === 0 || filters.bands.includes(bandOf(t.price))) &&
+      sideMatches(filters.side, t.outcome)
+  );
+}
+
+// ---------- Performance ----------
+
+export interface TrendPoint {
+  ts: number;
+  value: number;
+}
+
+export function cumulativePnlSeries(plays: Play[]): TrendPoint[] {
+  const sorted = [...plays].sort((a, b) => a.ts - b.ts);
+  let cum = 0;
+  return sorted.map((p) => {
+    cum += p.pnl;
+    return { ts: p.ts, value: cum };
+  });
+}
+
+export interface DayCell {
+  /** ISO date (UTC) */
+  date: string;
+  net: number;
+  wins: number;
+  losses: number;
+  winsPnl: number;
+  lossesPnl: number;
+  opened: number;
+}
+
+export function dayKey(tsSec: number): string {
+  return new Date(tsSec * 1000).toISOString().slice(0, 10);
+}
+
+/** One entry per day that had any activity: resolutions and/or opens (BUY trades). */
+export function calendarDays(
+  plays: Play[],
+  trades: TradeLite[]
+): Map<string, DayCell> {
+  const days = new Map<string, DayCell>();
+  const get = (key: string): DayCell => {
+    let d = days.get(key);
+    if (!d) {
+      d = { date: key, net: 0, wins: 0, losses: 0, winsPnl: 0, lossesPnl: 0, opened: 0 };
+      days.set(key, d);
+    }
+    return d;
+  };
+  for (const p of plays) {
+    const d = get(dayKey(p.ts));
+    d.net += p.pnl;
+    if (p.pnl >= 0) {
+      d.wins += 1;
+      d.winsPnl += p.pnl;
+    } else {
+      d.losses += 1;
+      d.lossesPnl += p.pnl;
+    }
+  }
+  for (const t of trades) {
+    if (t.side === "BUY") get(dayKey(t.ts)).opened += 1;
+  }
+  return days;
+}
+
+export interface BandStat {
+  key: BandKey;
+  label: string;
+  range: string;
+  count: number;
+  pnl: number;
+}
+
+export function bandDistribution(plays: Play[]): BandStat[] {
+  return BANDS.map((b) => {
+    const inBand = plays.filter((p) => bandOf(p.entryPrice) === b.key);
+    return {
+      key: b.key,
+      label: b.label,
+      range: b.range,
+      count: inBand.length,
+      pnl: inBand.reduce((s, p) => s + p.pnl, 0),
+    };
+  });
+}
+
+export function pnlByCategory(plays: Play[]): { label: string; value: number }[] {
+  const map = new Map<string, number>();
+  for (const p of plays) map.set(p.category, (map.get(p.category) ?? 0) + p.pnl);
+  return [...map.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+export function volumeByCategory(trades: TradeLite[]): { label: string; value: number }[] {
+  const map = new Map<string, number>();
+  for (const t of trades) map.set(t.category, (map.get(t.category) ?? 0) + t.usd);
+  return [...map.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+// ---------- Style ----------
+
+export interface StylePoint {
+  /** Mean probability at entry across plays (0..1). Low = risky. */
+  avgEntry: number;
+  /** Closed plays per week over the filtered window. */
+  playsPerWeek: number;
+  plays: number;
+}
+
+export function stylePoint(
+  plays: Play[],
+  filters: Filters,
+  nowSec: number
+): StylePoint | null {
+  if (plays.length === 0) return null;
+  const avgEntry = plays.reduce((s, p) => s + p.entryPrice, 0) / plays.length;
+  const start = windowStart(filters.dateKey, nowSec);
+  const earliest = start > 0 ? start : Math.min(...plays.map((p) => p.ts));
+  const weeks = Math.max((nowSec - earliest) / (7 * 86400), 1 / 7);
+  return { avgEntry, playsPerWeek: plays.length / weeks, plays: plays.length };
+}
+
+function weeklyBuckets(plays: Play[]): Map<number, Play[]> {
+  const buckets = new Map<number, Play[]>();
+  for (const p of plays) {
+    const week = Math.floor(p.ts / (7 * 86400)) * 7 * 86400;
+    const arr = buckets.get(week);
+    if (arr) arr.push(p);
+    else buckets.set(week, [p]);
+  }
+  return buckets;
+}
+
+export function winRate(plays: Play[]): number | null {
+  if (plays.length === 0) return null;
+  return plays.filter((p) => p.pnl > 0).length / plays.length;
+}
+
+export function winRateTrend(plays: Play[]): TrendPoint[] {
+  return [...weeklyBuckets(plays).entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([ts, arr]) => ({ ts, value: (winRate(arr) ?? 0) * 100 }));
+}
+
+export function returnRatio(plays: Play[]): number | null {
+  const staked = plays.reduce((s, p) => s + p.staked, 0);
+  if (staked === 0) return null;
+  return plays.reduce((s, p) => s + p.returned, 0) / staked;
+}
+
+export function returnRatioTrend(plays: Play[]): TrendPoint[] {
+  return [...weeklyBuckets(plays).entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([ts, arr]) => ({ ts, value: returnRatio(arr) ?? 0 }));
+}
