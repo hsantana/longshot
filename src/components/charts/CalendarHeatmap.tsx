@@ -121,15 +121,24 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
     }
     svgWidth = cardW;
   } else {
-    // GitHub-style: 7 weekday rows, columns are weeks. Fixed height caps the
-    // cell size; center horizontally when narrower than the card.
+    // GitHub-style: 7 weekday rows, columns are weeks. Cell size is the smaller
+    // of what the fixed height allows and what fits all week-columns across the
+    // card width, so the whole range fits with no horizontal scroll.
     const start = new Date(
       Math.max(windowStart.getTime(), end.getTime() - MAX_WEEKS * 7 * dayMs)
     );
     start.setUTCDate(start.getUTCDate() - start.getUTCDay()); // align to Sunday
     gridStart = start;
-    cell = Math.floor((GRID_H - 6 * GAP) / 7);
+
+    const totalDays = Math.round((end.getTime() - start.getTime()) / dayMs) + 1;
+    const weeks = Math.ceil(totalDays / 7);
+    const byHeight = Math.floor((GRID_H - 6 * GAP) / 7);
+    const byWidth = Math.floor((cardW - LABEL_W) / weeks) - GAP;
+    cell = Math.max(Math.min(byHeight, byWidth), 4);
     const slot = cell + GAP;
+    // Center the 7-row block vertically within the fixed grid height.
+    const blockH = 7 * slot - GAP;
+    const gridTop = HEADER_H + Math.max((GRID_H - blockH) / 2, 0);
 
     let lastMonth = -1;
     const cursor = new Date(start);
@@ -146,7 +155,7 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
           key: isoDay(date),
           date,
           x: LABEL_W + weekIndex * slot,
-          y: HEADER_H + date.getUTCDay() * slot,
+          y: gridTop + date.getUTCDay() * slot,
         });
         cursor.setUTCDate(cursor.getUTCDate() + 1);
       }
@@ -154,7 +163,7 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
     }
 
     ["Mon", "Wed", "Fri"].forEach((label, i) => {
-      weekdayLabels.push({ text: label[0], y: HEADER_H + (1 + i * 2) * slot + cell - 3 });
+      weekdayLabels.push({ text: label[0], y: gridTop + (1 + i * 2) * slot + cell - 3 });
     });
     svgWidth = LABEL_W + weekIndex * slot;
   }
