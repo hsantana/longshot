@@ -41,7 +41,7 @@ export default function FilterBar({ categories, filters, onChange }: Props) {
   }
 
   return (
-    <div className="space-y-5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 lg:sticky lg:top-8">
+    <div className="space-y-5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <Group label="Status">
         {(["all", "open", "closed"] as const).map((s) => (
           <button

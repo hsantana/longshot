@@ -36,7 +36,7 @@ export default function StyleView({
         </Card>
       </div>
 
-      <aside className="order-1 lg:order-2">
+      <aside className="order-1 lg:order-2 lg:sticky lg:top-8 lg:self-start">
         <FilterBar categories={categories} filters={filters} onChange={setFilters} />
       </aside>
     </div>
