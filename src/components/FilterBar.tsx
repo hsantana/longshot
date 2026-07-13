@@ -20,6 +20,18 @@ const chip = (active: boolean) =>
       : "border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-700 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-200"
   }`;
 
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-zinc-400">
+        {label}
+      </p>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+/** Vertical filter rail (sidebar on desktop, stacked block on mobile). */
 export default function FilterBar({ categories, filters, onChange }: Props) {
   function toggleBand(key: BandKey) {
     const bands = filters.bands.includes(key)
@@ -29,13 +41,12 @@ export default function FilterBar({ categories, filters, onChange }: Props) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <label className="flex items-center gap-2 text-xs text-zinc-400">
-        Markets
+    <div className="space-y-5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 lg:sticky lg:top-8">
+      <Group label="Markets">
         <select
           value={filters.category}
           onChange={(e) => onChange({ ...filters, category: e.target.value })}
-          className="rounded-lg border border-zinc-200 bg-transparent px-2 py-1 text-xs font-medium text-zinc-700 outline-none dark:border-zinc-700 dark:text-zinc-200 dark:[&>option]:bg-zinc-900"
+          className="w-full rounded-lg border border-zinc-200 bg-transparent px-2 py-1.5 text-xs font-medium text-zinc-700 outline-none dark:border-zinc-700 dark:text-zinc-200 dark:[&>option]:bg-zinc-900"
         >
           <option value="all">All</option>
           {categories.map((c) => (
@@ -44,10 +55,9 @@ export default function FilterBar({ categories, filters, onChange }: Props) {
             </option>
           ))}
         </select>
-      </label>
+      </Group>
 
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs text-zinc-400">Dates</span>
+      <Group label="Dates">
         {DATE_PRESETS.map((p) => (
           <button
             key={p.key}
@@ -58,12 +68,9 @@ export default function FilterBar({ categories, filters, onChange }: Props) {
             {p.label}
           </button>
         ))}
-      </div>
+      </Group>
 
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs text-zinc-400" title="Probability band at entry">
-          Play
-        </span>
+      <Group label="Type of play">
         {BANDS.map((b) => (
           <button
             key={b.key}
@@ -75,10 +82,9 @@ export default function FilterBar({ categories, filters, onChange }: Props) {
             {b.label}
           </button>
         ))}
-      </div>
+      </Group>
 
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs text-zinc-400">Side</span>
+      <Group label="Side">
         {(["both", "yes", "no"] as const).map((s) => (
           <button
             key={s}
@@ -89,7 +95,7 @@ export default function FilterBar({ categories, filters, onChange }: Props) {
             {s === "both" ? "Both" : s === "yes" ? "Yes" : "No"}
           </button>
         ))}
-      </div>
+      </Group>
     </div>
   );
 }

@@ -35,7 +35,7 @@ export default async function TrackerLayout({
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
+    <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <Link href="/" className="text-xl text-zinc-900 dark:text-zinc-100">
           <Wordmark />
@@ -89,11 +89,10 @@ export default async function TrackerLayout({
             </div>
           </section>
 
-          <div className="mt-6">
+          <div className="mt-6 lg:grid lg:grid-cols-[150px_minmax(0,1fr)] lg:items-start lg:gap-8">
             <TabNav handle={handle} />
+            <div className="mt-6 lg:mt-0">{children}</div>
           </div>
-
-          <div className="mt-6">{children}</div>
         </>
       )}
     </main>

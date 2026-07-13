@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { TrendPoint } from "@/lib/analytics";
 import { useContainerWidth } from "./useContainerWidth";
 
@@ -10,9 +10,12 @@ interface Props {
   formatValue: (v: number) => string;
   /** Draw a horizontal reference line at this value (e.g. 0 for PnL). */
   baseline?: number;
+  /** Gradient fill under the line. */
+  area?: boolean;
+  /** "spark": no axes/grid/tooltip — a tiny trend indication. */
+  variant?: "full" | "spark";
 }
 
-const PAD = { top: 10, right: 10, bottom: 22, left: 58 };
 const TICK_CLASS = "fill-zinc-400 text-[11px]";
 
 function niceTicks(min: number, max: number, n = 4): number[] {
@@ -46,12 +49,28 @@ function smoothPath(pts: { x: number; y: number }[]): string {
   return d;
 }
 
-export default function LineChart({ data, height = 200, formatValue, baseline }: Props) {
+export default function LineChart({
+  data,
+  height,
+  formatValue,
+  baseline,
+  area = false,
+  variant = "full",
+}: Props) {
   const [containerRef, measuredWidth] = useContainerWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const gradientId = useId();
+
+  const spark = variant === "spark";
+  const PAD = spark
+    ? { top: 3, right: 3, bottom: 3, left: 3 }
+    : { top: 10, right: 10, bottom: 22, left: 58 };
+  const H = height ?? (spark ? 44 : 200);
 
   if (data.length === 0) {
-    return (
+    return spark ? (
+      <div style={{ height: H }} />
+    ) : (
       <p className="flex items-center justify-center py-12 text-sm text-zinc-400">
         No closed plays in this window.
       </p>
@@ -59,7 +78,6 @@ export default function LineChart({ data, height = 200, formatValue, baseline }:
   }
 
   const W = measuredWidth || 560;
-  const H = height;
   const xs = data.map((d) => d.ts);
   const ys = data.map((d) => d.value);
   const xMin = Math.min(...xs);
@@ -83,15 +101,19 @@ export default function LineChart({ data, height = 200, formatValue, baseline }:
 
   const pts = data.map((d) => ({ x: x(d.ts), y: y(d.value) }));
   const path = smoothPath(pts);
+  const bottomY = H - PAD.bottom;
+  const areaPath = `${path}L${pts[pts.length - 1].x.toFixed(1)},${bottomY}L${pts[0].x.toFixed(1)},${bottomY}Z`;
 
-  const ticks = niceTicks(yMin, yMax);
+  const ticks = spark ? [] : niceTicks(yMin, yMax);
   const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-  const xTickIdx =
-    data.length <= 4
+  const xTickIdx = spark
+    ? []
+    : data.length <= 4
       ? data.map((_, i) => i)
       : [0, Math.floor((data.length - 1) / 2), data.length - 1];
 
   function onMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (spark) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const fx = e.clientX - rect.left;
     let best = 0;
@@ -106,7 +128,7 @@ export default function LineChart({ data, height = 200, formatValue, baseline }:
     setHover(best);
   }
 
-  const h = hover !== null ? data[hover] : null;
+  const h = !spark && hover !== null ? data[hover] : null;
 
   return (
     <div ref={containerRef} className="relative">
@@ -120,6 +142,12 @@ export default function LineChart({ data, height = 200, formatValue, baseline }:
           role="img"
           aria-label="Line chart"
         >
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-emerald-500)" stopOpacity={0.22} />
+              <stop offset="100%" stopColor="var(--color-emerald-500)" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
           {ticks.map((t) => (
             <g key={t}>
               <line
@@ -135,7 +163,7 @@ export default function LineChart({ data, height = 200, formatValue, baseline }:
               </text>
             </g>
           ))}
-          {baseline !== undefined && baseline >= yMin && baseline <= yMax && (
+          {!spark && baseline !== undefined && baseline >= yMin && baseline <= yMax && (
             <line
               x1={PAD.left}
               x2={W - PAD.right}
@@ -157,6 +185,7 @@ export default function LineChart({ data, height = 200, formatValue, baseline }:
               {dateFmt.format(new Date(data[i].ts * 1000))}
             </text>
           ))}
+          {area && <path d={areaPath} fill={`url(#${gradientId})`} />}
           <path
             d={path}
             fill="none"

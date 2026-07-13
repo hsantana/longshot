@@ -150,13 +150,33 @@ export interface TrendPoint {
   value: number;
 }
 
-export function cumulativePnlSeries(plays: Play[]): TrendPoint[] {
-  const sorted = [...plays].sort((a, b) => a.ts - b.ts);
+/**
+ * Running total as a daily time series over the window (one point per day,
+ * carrying the total forward), so the line is continuous rather than jumping
+ * between play timestamps.
+ */
+export function cumulativePnlSeries(
+  plays: Play[],
+  startSec: number,
+  nowSec: number
+): TrendPoint[] {
+  if (plays.length === 0) return [];
+  const byDay = new Map<number, number>();
+  for (const p of plays) {
+    const day = Math.floor(p.ts / 86400) * 86400;
+    byDay.set(day, (byDay.get(day) ?? 0) + p.pnl);
+  }
+  const firstPlayDay = Math.min(...byDay.keys());
+  const startDay = Math.floor(Math.max(startSec, 1) / 86400) * 86400;
+  const from = startSec > 0 ? Math.min(startDay, firstPlayDay) : firstPlayDay;
+  const to = Math.floor(nowSec / 86400) * 86400;
+  const points: TrendPoint[] = [];
   let cum = 0;
-  return sorted.map((p) => {
-    cum += p.pnl;
-    return { ts: p.ts, value: cum };
-  });
+  for (let d = from; d <= to; d += 86400) {
+    cum += byDay.get(d) ?? 0;
+    points.push({ ts: d, value: cum });
+  }
+  return points;
 }
 
 export interface DayCell {

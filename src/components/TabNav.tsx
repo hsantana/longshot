@@ -14,7 +14,7 @@ export default function TabNav({ handle }: { handle: string }) {
   const base = `/t/${handle}`;
 
   return (
-    <nav className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800">
+    <nav className="flex items-center gap-1 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800 lg:sticky lg:top-8 lg:flex-col lg:items-stretch lg:gap-1 lg:border-b-0">
       {TABS.map((tab) => {
         const href = tab.segment ? `${base}/${tab.segment}` : base;
         const active =
@@ -25,10 +25,10 @@ export default function TabNav({ handle }: { handle: string }) {
           <Link
             key={tab.label}
             href={href}
-            className={`border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+            className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition lg:rounded-lg lg:border-b-0 lg:px-3 lg:py-2 ${
               active
-                ? "border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100"
-                : "border-transparent text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                ? "border-zinc-900 text-zinc-900 lg:bg-zinc-200/70 dark:border-zinc-100 dark:text-zinc-100 dark:lg:bg-zinc-800"
+                : "border-transparent text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 lg:hover:bg-zinc-100 dark:lg:hover:bg-zinc-800/50"
             }`}
           >
             {tab.label}
