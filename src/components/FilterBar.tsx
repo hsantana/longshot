@@ -6,19 +6,13 @@ import {
   type BandKey,
   type Filters,
 } from "@/lib/analytics";
+import { chipClass as chip } from "@/lib/ui";
 
 interface Props {
   categories: string[];
   filters: Filters;
   onChange: (f: Filters) => void;
 }
-
-const chip = (active: boolean) =>
-  `rounded-full border px-3 py-1 text-xs font-medium transition ${
-    active
-      ? "border-emerald-600 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-500 dark:text-zinc-900"
-      : "border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-700 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-200"
-  }`;
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
