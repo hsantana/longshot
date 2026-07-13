@@ -52,6 +52,8 @@ export interface ClosedPosition {
   outcomeIndex: number;
   endDate: string;
   timestamp: number;
+  /** Market resolved but tokens not yet redeemed; true when there's value left to claim. */
+  claimable?: boolean;
 }
 
 export interface AccountSummary {
@@ -138,13 +140,43 @@ export async function getAccount(handle: string): Promise<
   if (!resolved) return null;
   const { address } = resolved;
 
-  const [openPositions, closedPositions, portfolioValue, profit] =
+  const [rawOpenPositions, rawClosedPositions, portfolioValue, profit] =
     await Promise.all([
       getOpenPositions(address),
       getClosedPositions(address),
       getPortfolioValue(address),
       getProfitProfile(address),
     ]);
+
+  // The Data API keeps a position in /positions until its tokens are sold or
+  // redeemed — including markets that already resolved (redeemable: true),
+  // e.g. an eliminated team in a still-running negative-risk event. Those
+  // outcomes are final, so present them as closed.
+  const openPositions = rawOpenPositions.filter((p) => !p.redeemable);
+  const resolvedAsClosed: ClosedPosition[] = rawOpenPositions
+    .filter((p) => p.redeemable)
+    .map((p) => ({
+      proxyWallet: p.proxyWallet,
+      asset: p.asset,
+      conditionId: p.conditionId,
+      avgPrice: p.avgPrice,
+      totalBought: p.totalBought,
+      realizedPnl: p.realizedPnl + p.cashPnl,
+      curPrice: p.curPrice,
+      title: p.title,
+      slug: p.slug,
+      icon: p.icon,
+      eventSlug: p.eventSlug,
+      outcome: p.outcome,
+      outcomeIndex: p.outcomeIndex,
+      endDate: p.endDate,
+      timestamp: Math.floor(Date.parse(p.endDate) / 1000) || 0,
+      claimable: p.currentValue > 0,
+    }));
+
+  const closedPositions = [...resolvedAsClosed, ...rawClosedPositions].sort(
+    (a, b) => b.timestamp - a.timestamp
+  );
 
   const unrealizedPnl = openPositions.reduce((sum, p) => sum + p.cashPnl, 0);
 

@@ -160,6 +160,11 @@ function ClosedTable({ positions }: { positions: ClosedPosition[] }) {
                 {formatDate(p.timestamp)}
               </td>
               <td className={`${td} font-medium ${pnlColor(p.realizedPnl)}`}>
+                {p.claimable && (
+                  <span className="mr-2 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    claimable
+                  </span>
+                )}
                 {formatSignedUsd(p.realizedPnl)}
               </td>
             </tr>
@@ -209,7 +214,7 @@ export default function PositionTables({
             {label}
           </button>
         ))}
-        {tab === "closed" && closedPositions.length === 100 && (
+        {tab === "closed" && closedPositions.length >= 100 && (
           <span className="ml-auto px-4 text-xs text-zinc-400">
             showing 100 most recent
           </span>
