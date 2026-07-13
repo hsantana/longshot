@@ -40,7 +40,7 @@ function MarketCell({
           href={`https://polymarket.com/event/${eventSlug}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="block truncate font-medium text-zinc-900 hover:underline dark:text-zinc-100"
+          className="block truncate text-sm font-medium text-zinc-900 hover:underline dark:text-zinc-100"
           title={title}
         >
           {title}
@@ -94,7 +94,7 @@ function OpenTable({ positions }: { positions: OpenPosition[] }) {
               key={p.asset}
               className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/60"
             >
-              <td className="max-w-md px-4 py-3 text-left">
+              <td className="max-w-[220px] px-4 py-3 text-left">
                 <MarketCell
                   icon={p.icon}
                   title={p.title}
@@ -144,7 +144,7 @@ function ClosedTable({ positions }: { positions: ClosedPosition[] }) {
               key={`${p.asset}-${p.timestamp}`}
               className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/60"
             >
-              <td className="max-w-md px-4 py-3 text-left">
+              <td className="max-w-[220px] px-4 py-3 text-left">
                 <MarketCell
                   icon={p.icon}
                   title={p.title}
