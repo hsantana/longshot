@@ -43,6 +43,22 @@ v1 is deliberately narrow: the tracker only. Planned for later phases, roughly i
 - Per-market chart view
 - Kalshi support
 
-## License
+## Contributing
 
-[MIT](LICENSE)
+Not accepting external contributions yet — see [CONTRIBUTING.md](CONTRIBUTING.md).
+When contributions open, they are accepted under the same MIT License
+("inbound = outbound").
+
+## License and branding
+
+The source code is licensed under the [MIT License](LICENSE). The project
+name, logo, wordmark, and other brand assets are **not** included in that
+license — see [TRADEMARKS.md](TRADEMARKS.md) and [brand/README.md](brand/README.md).
+Forks and modified versions must use distinct branding and must not imply
+endorsement or official affiliation.
+
+To make rebranding easy, the name and wordmark are centralized in
+[`src/config/brand.ts`](src/config/brand.ts) — forks change that file (and
+replace anything under `brand/`) rather than hunting through the code.
+
+Copyright (c) 2026 Hugo Santana.

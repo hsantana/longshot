@@ -26,5 +26,11 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "wrangler": "^4.86.0"
+  },
+  "license": "MIT",
+  "author": "Hugo Santana",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hsantana/longshot.git"
   }
 }

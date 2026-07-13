@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { BRAND } from "@/config/brand";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,9 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Longshot — Polymarket performance tracker",
-  description:
-    "Look up any Polymarket trader's open positions, closed positions, and PnL. Open source, no login required.",
+  title: `${BRAND.name} — Polymarket performance tracker`,
+  description: `${BRAND.tagline} Open source, no login required.`,
 };
 
 export default function RootLayout({

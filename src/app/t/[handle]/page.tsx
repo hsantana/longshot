@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import SearchBox from "@/components/SearchBox";
+import Wordmark from "@/components/Wordmark";
 import PositionTables from "@/components/PositionTables";
+import { BRAND } from "@/config/brand";
 import { getAccount } from "@/lib/polymarket";
 import {
   formatSignedUsd,
@@ -19,7 +21,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { handle } = await params;
   const decoded = decodeURIComponent(handle);
-  return { title: `${decoded} · Longshot` };
+  return { title: `${decoded} · ${BRAND.name}` };
 }
 
 function StatCard({
@@ -69,9 +71,9 @@ export default async function TrackerPage({
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <Link
           href="/"
-          className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100"
+          className="text-xl text-zinc-900 dark:text-zinc-100"
         >
-          Longshot<span className="text-emerald-500">.</span>
+          <Wordmark />
         </Link>
         <div className="w-full sm:max-w-md">
           <SearchBox compact />
