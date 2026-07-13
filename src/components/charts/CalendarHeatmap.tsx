@@ -7,14 +7,20 @@ import { useContainerWidth } from "./useContainerWidth";
 
 interface Props {
   days: Map<string, DayCell>;
-  /** Window start (unix seconds); the grid runs from here to today, capped at 53 weeks. */
+  /** Window start (unix seconds); the grid runs from here to today. */
   startSec: number;
   nowSec: number;
 }
 
-const GAP = 3;
+const GAP = 4;
+const HEADER_H = 18; // room for month labels
+const GRID_H = 160; // fixed square-area height — the card never changes height
+const LABEL_W = 24; // weekday labels (GitHub mode only)
 const MAX_WEEKS = 53;
-const LABEL_W = 28;
+// Ranges up to this many days reflow chronologically to fill the width; longer
+// ranges use the GitHub-style weekday-column layout.
+const WRAP_MAX_DAYS = 45;
+const MAX_ROWS = 6;
 
 // Color priority per spec: resolved PnL (diverging, 3 shades/arm by tercile)
 // beats opened-only gray; no activity = near-blank.
@@ -43,38 +49,30 @@ interface HoverState {
   clientY: number;
 }
 
+interface Square {
+  key: string;
+  date: Date;
+  x: number;
+  y: number;
+}
+
 export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
   const [containerRef, measuredWidth] = useContainerWidth<HTMLDivElement>();
   const [hover, setHover] = useState<HoverState | null>(null);
 
+  const dayMs = 86400 * 1000;
   const end = new Date(nowSec * 1000);
   end.setUTCHours(0, 0, 0, 0);
-  const start = new Date(Math.max(startSec, nowSec - MAX_WEEKS * 7 * 86400) * 1000);
-  start.setUTCHours(0, 0, 0, 0);
-  // Align to Sunday so columns are calendar weeks.
-  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+  const windowStart = new Date(startSec * 1000);
+  windowStart.setUTCHours(0, 0, 0, 0);
 
-  const columns: { date: Date; key: string }[][] = [];
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    const col: { date: Date; key: string }[] = [];
-    for (let i = 0; i < 7 && cursor <= end; i++) {
-      col.push({ date: new Date(cursor), key: isoDay(cursor) });
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
-    }
-    columns.push(col);
-  }
+  const spanDays = Math.round((end.getTime() - windowStart.getTime()) / dayMs) + 1;
+  const wrap = spanDays <= WRAP_MAX_DAYS;
 
-  // Cell size adapts to the window: few weeks → big cells filling the card,
-  // a year → small cells, still fitting without dead space. Capped at 48px so
-  // short windows don't produce an absurdly tall 7-row grid; the grid is then
-  // centered so any leftover width reads as intentional margin, not dead space.
-  const available = (measuredWidth || 560) - LABEL_W;
-  const cell = Math.max(10, Math.min(48, Math.floor(available / columns.length) - GAP));
+  const cardW = measuredWidth || 560;
+  const svgHeight = HEADER_H + GRID_H;
 
-  const width = LABEL_W + columns.length * (cell + GAP);
-  const height = 7 * (cell + GAP) + 18;
-  const monthFmt = new Intl.DateTimeFormat("en-US", { month: "short" });
+  const monthFmt = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
   const dateFmt = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -82,8 +80,87 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
     timeZone: "UTC",
   });
 
-  // Terciles of |net| among days with resolutions, within the visible window.
-  const startKey = isoDay(start);
+  // ---- Build square positions + month labels for the active mode ----
+  const squares: Square[] = [];
+  const monthLabels: { text: string; x: number }[] = [];
+  const weekdayLabels: { text: string; y: number }[] = [];
+  let cell = 16;
+  let svgWidth = cardW;
+  let gridStart = windowStart;
+
+  if (wrap) {
+    // Chronological reflow: choose the row count that yields the biggest square
+    // that both fills the width and fits the fixed height.
+    const n = Math.max(spanDays, 1);
+    let best = { rows: 1, cell: 0, cols: n };
+    for (let rows = 1; rows <= MAX_ROWS; rows++) {
+      const cols = Math.ceil(n / rows);
+      const byW = Math.floor(cardW / cols) - GAP;
+      const byH = Math.floor(GRID_H / rows) - GAP;
+      const c = Math.min(byW, byH);
+      if (c > best.cell) best = { rows, cell: c, cols };
+    }
+    cell = Math.max(best.cell, 6);
+    const { rows, cols } = best;
+    const slot = cell + GAP;
+    const blockW = cols * slot - GAP;
+    const blockH = rows * slot - GAP;
+    const offsetX = Math.max((cardW - blockW) / 2, 0);
+    const offsetY = HEADER_H + Math.max((GRID_H - blockH) / 2, 0);
+
+    for (let i = 0; i < n; i++) {
+      const date = new Date(windowStart.getTime() + i * dayMs);
+      const row = Math.floor(i / cols);
+      const col = i % cols;
+      const x = offsetX + col * slot;
+      const y = offsetY + row * slot;
+      squares.push({ key: isoDay(date), date, x, y });
+      if (i === 0 || date.getUTCDate() === 1) {
+        monthLabels.push({ text: monthFmt.format(date), x });
+      }
+    }
+    svgWidth = cardW;
+  } else {
+    // GitHub-style: 7 weekday rows, columns are weeks. Fixed height caps the
+    // cell size; center horizontally when narrower than the card.
+    const start = new Date(
+      Math.max(windowStart.getTime(), end.getTime() - MAX_WEEKS * 7 * dayMs)
+    );
+    start.setUTCDate(start.getUTCDate() - start.getUTCDay()); // align to Sunday
+    gridStart = start;
+    cell = Math.floor((GRID_H - 6 * GAP) / 7);
+    const slot = cell + GAP;
+
+    let lastMonth = -1;
+    const cursor = new Date(start);
+    let weekIndex = 0;
+    while (cursor <= end) {
+      const month = cursor.getUTCMonth();
+      if (month !== lastMonth) {
+        lastMonth = month;
+        monthLabels.push({ text: monthFmt.format(cursor), x: LABEL_W + weekIndex * slot });
+      }
+      for (let d = 0; d < 7 && cursor <= end; d++) {
+        const date = new Date(cursor);
+        squares.push({
+          key: isoDay(date),
+          date,
+          x: LABEL_W + weekIndex * slot,
+          y: HEADER_H + date.getUTCDay() * slot,
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+      weekIndex++;
+    }
+
+    ["Mon", "Wed", "Fri"].forEach((label, i) => {
+      weekdayLabels.push({ text: label[0], y: HEADER_H + (1 + i * 2) * slot + cell - 3 });
+    });
+    svgWidth = LABEL_W + weekIndex * slot;
+  }
+
+  // Terciles of |net| among resolved days within the visible window.
+  const startKey = isoDay(gridStart);
   const magnitudes = [...days.values()]
     .filter((d) => (d.wins > 0 || d.losses > 0) && d.date >= startKey)
     .map((d) => Math.abs(d.net))
@@ -96,64 +173,50 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
     return net >= 0 ? POS[i] : NEG[i];
   };
 
-  let lastMonth = -1;
+  const radius = Math.min(4, cell / 4);
 
   return (
     <div ref={containerRef} className="relative">
       {measuredWidth > 0 && (
         <div className="overflow-x-auto">
-          <svg width={width} height={height} className="mx-auto block">
-            {["Mon", "Wed", "Fri"].map((label, i) => (
-              <text
-                key={label}
-                x={0}
-                y={18 + (1 + i * 2) * (cell + GAP) + cell - 3}
-                className="fill-zinc-400 text-[10px]"
-              >
-                {label[0]}
+          <svg width={svgWidth} height={svgHeight} className="mx-auto block">
+            {weekdayLabels.map((l) => (
+              <text key={l.text} x={0} y={l.y} className="fill-zinc-400 text-[10px]">
+                {l.text}
               </text>
             ))}
-            {columns.map((col, ci) => {
-              const month = col[0].date.getUTCMonth();
-              const showMonth = month !== lastMonth;
-              lastMonth = month;
+            {monthLabels.map((l, i) => (
+              <text key={i} x={l.x} y={10} className="fill-zinc-400 text-[10px]">
+                {l.text}
+              </text>
+            ))}
+            {squares.map((sq) => {
+              const c = days.get(sq.key);
+              const resolved = c && (c.wins > 0 || c.losses > 0);
+              const cls = resolved
+                ? shade(c.net)
+                : c && c.opened > 0
+                  ? OPENED
+                  : EMPTY;
               return (
-                <g key={ci} transform={`translate(${LABEL_W + ci * (cell + GAP)},0)`}>
-                  {showMonth && (
-                    <text x={0} y={10} className="fill-zinc-400 text-[10px]">
-                      {monthFmt.format(col[0].date)}
-                    </text>
-                  )}
-                  {col.map((day) => {
-                    const c = days.get(day.key);
-                    const resolved = c && (c.wins > 0 || c.losses > 0);
-                    const cls = resolved
-                      ? shade(c.net)
-                      : c && c.opened > 0
-                        ? OPENED
-                        : EMPTY;
-                    return (
-                      <rect
-                        key={day.key}
-                        x={0}
-                        y={18 + day.date.getUTCDay() * (cell + GAP)}
-                        width={cell}
-                        height={cell}
-                        rx={Math.min(4, cell / 4)}
-                        className={cls}
-                        onMouseEnter={(e) =>
-                          setHover({
-                            cell: c ?? null,
-                            date: dateFmt.format(day.date),
-                            clientX: e.clientX,
-                            clientY: e.clientY,
-                          })
-                        }
-                        onMouseLeave={() => setHover(null)}
-                      />
-                    );
-                  })}
-                </g>
+                <rect
+                  key={sq.key}
+                  x={sq.x}
+                  y={sq.y}
+                  width={cell}
+                  height={cell}
+                  rx={radius}
+                  className={cls}
+                  onMouseEnter={(e) =>
+                    setHover({
+                      cell: c ?? null,
+                      date: dateFmt.format(sq.date),
+                      clientX: e.clientX,
+                      clientY: e.clientY,
+                    })
+                  }
+                  onMouseLeave={() => setHover(null)}
+                />
               );
             })}
           </svg>
@@ -191,7 +254,7 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
           )}
         </div>
       )}
-      <div className="mt-2 flex items-center gap-3 text-[11px] text-zinc-400">
+      <div className="mt-3 flex items-center gap-3 text-[11px] text-zinc-400">
         <span className="flex items-center gap-1">
           <span className="h-3 w-3 rounded-[3px] bg-zinc-300 dark:bg-zinc-600" /> opened only
         </span>
