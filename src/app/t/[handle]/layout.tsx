@@ -37,12 +37,13 @@ export default async function TrackerLayout({
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <Link href="/" className="shrink-0">
-          <Wordmark className="h-12" />
+        <Link href="/" className="shrink-0 sm:flex-1">
+          <Wordmark className="h-[53px]" />
         </Link>
         <div className="w-full sm:max-w-md">
           <SearchBox compact />
         </div>
+        <div className="hidden sm:block sm:flex-1" />
       </header>
 
       {!account ? (
