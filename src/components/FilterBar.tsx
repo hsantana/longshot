@@ -84,6 +84,19 @@ export default function FilterBar({ categories, filters, onChange }: Props) {
         ))}
       </Group>
 
+      <Group label="Status">
+        {(["all", "open", "closed"] as const).map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onChange({ ...filters, status: s })}
+            className={chip(filters.status === s)}
+          >
+            {s === "all" ? "All" : s === "open" ? "Open" : "Closed"}
+          </button>
+        ))}
+      </Group>
+
       <Group label="Side">
         {(["both", "yes", "no"] as const).map((s) => (
           <button

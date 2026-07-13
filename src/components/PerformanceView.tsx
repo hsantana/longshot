@@ -5,13 +5,12 @@ import {
   DEFAULT_FILTERS,
   bandDistribution,
   calendarDays,
+  categoryBreakdown,
   cumulativePnlSeries,
   filterPlays,
   filterTrades,
-  pnlByCategory,
   returnRatio,
   returnRatioTrend,
-  volumeByCategory,
   windowStart,
   winRate,
   winRateTrend,
@@ -19,7 +18,7 @@ import {
   type Play,
   type TradeLite,
 } from "@/lib/analytics";
-import { formatSignedUsd, formatUsd } from "@/lib/format";
+import { formatSignedUsd, formatUsd, pnlColor } from "@/lib/format";
 import Card from "@/components/Card";
 import FilterBar from "@/components/FilterBar";
 import LineChart from "@/components/charts/LineChart";
@@ -89,8 +88,7 @@ export default function PerformanceView({
   );
   const days = useMemo(() => calendarDays(fPlays, fTrades), [fPlays, fTrades]);
   const bands = useMemo(() => bandDistribution(fPlays), [fPlays]);
-  const catPnl = useMemo(() => pnlByCategory(fPlays), [fPlays]);
-  const catVolume = useMemo(() => volumeByCategory(fTrades), [fTrades]);
+  const markets = useMemo(() => categoryBreakdown(fPlays, fTrades), [fPlays, fTrades]);
 
   const wr = winRate(fPlays);
   const wrTrend = useMemo(() => winRateTrend(fPlays), [fPlays]);
@@ -102,7 +100,21 @@ export default function PerformanceView({
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_230px] lg:items-start">
       <div className="order-2 space-y-4 lg:order-1">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <TrendTile
+            label="PnL"
+            hint={
+              filters.status === "open"
+                ? "Unrealized, open positions"
+                : filters.status === "closed"
+                  ? "Realized, closed plays"
+                  : "Realized + unrealized"
+            }
+            value={formatSignedUsd(totalPnl, true)}
+            valueClass={pnlColor(totalPnl)}
+            trend={cumulative}
+            formatValue={(v) => formatUsd(v, true)}
+          />
           <TrendTile
             label="Win rate"
             hint="Resolved wins ÷ resolved plays"
@@ -120,26 +132,24 @@ export default function PerformanceView({
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Card
-            title="Cumulative PnL"
-            subtitle={`${fPlays.length} closed play${fPlays.length === 1 ? "" : "s"} · net ${formatSignedUsd(totalPnl)}`}
-          >
-            <LineChart
-              data={cumulative}
-              formatValue={(v) => formatUsd(v, true)}
-              baseline={0}
-              area
-            />
-          </Card>
+        <Card
+          title="Cumulative PnL"
+          subtitle={`${fPlays.length} play${fPlays.length === 1 ? "" : "s"} · net ${formatSignedUsd(totalPnl)}`}
+        >
+          <LineChart
+            data={cumulative}
+            formatValue={(v) => formatUsd(v, true)}
+            baseline={0}
+            area
+          />
+        </Card>
 
-          <Card
-            title="Calendar"
-            subtitle="Days colored by net PnL of plays resolved that day; gray = opened only"
-          >
-            <CalendarHeatmap days={days} startSec={startSec} nowSec={nowSec} />
-          </Card>
-        </div>
+        <Card
+          title="Calendar"
+          subtitle="Days colored by net PnL of plays resolved that day; gray = opened only"
+        >
+          <CalendarHeatmap days={days} startSec={startSec} nowSec={nowSec} />
+        </Card>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <Card title="Plays by probability band" subtitle="Probability at entry">
@@ -154,27 +164,18 @@ export default function PerformanceView({
             />
           </Card>
 
-          <div className="space-y-4">
-            <Card title="PnL by market category">
-              <BarList
-                mode="diverging"
-                items={catPnl.map((c) => ({
-                  label: c.label,
-                  value: c.value,
-                  display: formatSignedUsd(c.value, true),
-                }))}
-              />
-            </Card>
-            <Card title="Volume by market category" subtitle="Total traded (buys + sells)">
-              <BarList
-                items={catVolume.map((c) => ({
-                  label: c.label,
-                  value: c.value,
-                  display: formatUsd(c.value, true),
-                }))}
-              />
-            </Card>
-          </div>
+          <Card title="Markets" subtitle="PnL and traded volume by category">
+            <BarList
+              mode="diverging"
+              columns={{ value: "PnL", extra: "Volume" }}
+              items={markets.map((c) => ({
+                label: c.label,
+                value: c.pnl,
+                display: formatSignedUsd(c.pnl, true),
+                extra: formatUsd(c.volume, true),
+              }))}
+            />
+          </Card>
         </div>
 
         {truncated && (

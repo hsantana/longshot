@@ -6,7 +6,13 @@ import {
   getAccount,
   getCategories,
 } from "./polymarket";
-import { toPlays, toTradeLites, type Play, type TradeLite } from "./analytics";
+import {
+  toOpenPlays,
+  toPlays,
+  toTradeLites,
+  type Play,
+  type TradeLite,
+} from "./analytics";
 
 export interface Dashboard {
   plays: Play[];
@@ -23,11 +29,15 @@ export const getDashboard = cache(
     const trades = await cachedGetTrades(account.summary.address);
     const slugs = [
       ...account.closedPositions.map((p) => p.eventSlug),
+      ...account.openPositions.map((p) => p.eventSlug),
       ...trades.map((t) => t.eventSlug),
     ];
     const categories = await getCategories(slugs);
 
-    const plays = toPlays(account.closedPositions, categories);
+    const plays = [
+      ...toPlays(account.closedPositions, categories),
+      ...toOpenPlays(account.openPositions, categories),
+    ];
     const tradeLites = toTradeLites(trades, categories);
 
     const categoryList = [

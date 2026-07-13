@@ -2,9 +2,9 @@
 // everything operates on plays (closed positions) and trades passed in,
 // both already enriched with their category server-side.
 
-import type { ClosedPosition, Trade } from "./polymarket";
+import type { ClosedPosition, OpenPosition, Trade } from "./polymarket";
 
-/** A play = a closed position, enriched with its category. */
+/** A play = a position (open or closed), enriched with its category. */
 export interface Play {
   title: string;
   eventSlug: string;
@@ -13,13 +13,14 @@ export interface Play {
   entryPrice: number;
   /** Dollars staked. */
   staked: number;
-  /** Realized PnL. */
+  /** Realized PnL for closed plays; unrealized (mark-to-market) for open. */
   pnl: number;
-  /** Dollars returned = staked + pnl. */
+  /** Dollars returned (closed) or current value (open). */
   returned: number;
-  /** Close/resolution time (unix seconds). */
+  /** Close/resolution time (unix seconds); 0 for open plays (no close date). */
   ts: number;
   category: string;
+  status: "open" | "closed";
 }
 
 /** Slimmed trade passed to the client (full Trade objects are heavy at 3k rows). */
@@ -63,6 +64,7 @@ export interface Filters {
   dateKey: DateKey;
   bands: BandKey[]; // empty = all bands
   side: "both" | "yes" | "no";
+  status: "all" | "open" | "closed";
 }
 
 export const DEFAULT_FILTERS: Filters = {
@@ -70,6 +72,7 @@ export const DEFAULT_FILTERS: Filters = {
   dateKey: "30",
   bands: [],
   side: "both",
+  status: "all",
 };
 
 export function toPlays(
@@ -88,8 +91,28 @@ export function toPlays(
       returned: staked + p.realizedPnl,
       ts: p.timestamp,
       category: categories.get(p.eventSlug) ?? "Other",
+      status: "closed" as const,
     };
   });
+}
+
+/** Open positions as plays: PnL is unrealized, no close date. */
+export function toOpenPlays(
+  open: OpenPosition[],
+  categories: Map<string, string>
+): Play[] {
+  return open.map((p) => ({
+    title: p.title,
+    eventSlug: p.eventSlug,
+    outcome: p.outcome,
+    entryPrice: p.avgPrice,
+    staked: p.initialValue,
+    pnl: p.cashPnl,
+    returned: p.currentValue,
+    ts: 0,
+    category: categories.get(p.eventSlug) ?? "Other",
+    status: "open" as const,
+  }));
 }
 
 export function toTradeLites(
@@ -121,7 +144,9 @@ export function filterPlays(plays: Play[], filters: Filters, nowSec: number): Pl
   const start = windowStart(filters.dateKey, nowSec);
   return plays.filter(
     (p) =>
-      p.ts >= start &&
+      (filters.status === "all" || p.status === filters.status) &&
+      // Open plays have no close date; the date window applies to closed ones.
+      (p.status === "open" || p.ts >= start) &&
       (filters.category === "all" || p.category === filters.category) &&
       (filters.bands.length === 0 || filters.bands.includes(bandOf(p.entryPrice))) &&
       sideMatches(filters.side, p.outcome)
@@ -156,10 +181,11 @@ export interface TrendPoint {
  * between play timestamps.
  */
 export function cumulativePnlSeries(
-  plays: Play[],
+  allPlays: Play[],
   startSec: number,
   nowSec: number
 ): TrendPoint[] {
+  const plays = allPlays.filter((p) => p.status === "closed");
   if (plays.length === 0) return [];
   const byDay = new Map<number, number>();
   for (const p of plays) {
@@ -196,9 +222,10 @@ export function dayKey(tsSec: number): string {
 
 /** One entry per day that had any activity: resolutions and/or opens (BUY trades). */
 export function calendarDays(
-  plays: Play[],
+  allPlays: Play[],
   trades: TradeLite[]
 ): Map<string, DayCell> {
+  const plays = allPlays.filter((p) => p.status === "closed");
   const days = new Map<string, DayCell>();
   const get = (key: string): DayCell => {
     let d = days.get(key);
@@ -246,20 +273,25 @@ export function bandDistribution(plays: Play[]): BandStat[] {
   });
 }
 
-export function pnlByCategory(plays: Play[]): { label: string; value: number }[] {
-  const map = new Map<string, number>();
-  for (const p of plays) map.set(p.category, (map.get(p.category) ?? 0) + p.pnl);
+/** PnL (from plays) and traded volume (from trades) per market category. */
+export function categoryBreakdown(
+  plays: Play[],
+  trades: TradeLite[]
+): { label: string; pnl: number; volume: number }[] {
+  const map = new Map<string, { pnl: number; volume: number }>();
+  const get = (label: string) => {
+    let e = map.get(label);
+    if (!e) {
+      e = { pnl: 0, volume: 0 };
+      map.set(label, e);
+    }
+    return e;
+  };
+  for (const p of plays) get(p.category).pnl += p.pnl;
+  for (const t of trades) get(t.category).volume += t.usd;
   return [...map.entries()]
-    .map(([label, value]) => ({ label, value }))
-    .sort((a, b) => b.value - a.value);
-}
-
-export function volumeByCategory(trades: TradeLite[]): { label: string; value: number }[] {
-  const map = new Map<string, number>();
-  for (const t of trades) map.set(t.category, (map.get(t.category) ?? 0) + t.usd);
-  return [...map.entries()]
-    .map(([label, value]) => ({ label, value }))
-    .sort((a, b) => b.value - a.value);
+    .map(([label, e]) => ({ label, ...e }))
+    .sort((a, b) => b.pnl - a.pnl);
 }
 
 // ---------- Style ----------
@@ -279,13 +311,20 @@ export function stylePoint(
 ): StylePoint | null {
   if (plays.length === 0) return null;
   const avgEntry = plays.reduce((s, p) => s + p.entryPrice, 0) / plays.length;
+  const dated = plays.filter((p) => p.ts > 0);
   const start = windowStart(filters.dateKey, nowSec);
-  const earliest = start > 0 ? start : Math.min(...plays.map((p) => p.ts));
+  const earliest =
+    start > 0
+      ? start
+      : dated.length > 0
+        ? Math.min(...dated.map((p) => p.ts))
+        : nowSec - 30 * 86400;
   const weeks = Math.max((nowSec - earliest) / (7 * 86400), 1 / 7);
-  return { avgEntry, playsPerWeek: plays.length / weeks, plays: plays.length };
+  return { avgEntry, playsPerWeek: dated.length / weeks, plays: plays.length };
 }
 
-function weeklyBuckets(plays: Play[]): Map<number, Play[]> {
+function weeklyBuckets(allPlays: Play[]): Map<number, Play[]> {
+  const plays = allPlays.filter((p) => p.ts > 0);
   const buckets = new Map<number, Play[]>();
   for (const p of plays) {
     const week = Math.floor(p.ts / (7 * 86400)) * 7 * 86400;
@@ -296,7 +335,8 @@ function weeklyBuckets(plays: Play[]): Map<number, Play[]> {
   return buckets;
 }
 
-export function winRate(plays: Play[]): number | null {
+export function winRate(allPlays: Play[]): number | null {
+  const plays = allPlays.filter((p) => p.status === "closed");
   if (plays.length === 0) return null;
   return plays.filter((p) => p.pnl > 0).length / plays.length;
 }

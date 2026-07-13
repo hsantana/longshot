@@ -12,15 +12,27 @@ interface Props {
   items: Item[];
   /** "magnitude": single hue. "diverging": green/red by sign. */
   mode?: "magnitude" | "diverging";
+  /** Optional headers for the value and extra columns. */
+  columns?: { value: string; extra?: string };
 }
 
-export default function BarList({ items, mode = "magnitude" }: Props) {
+export default function BarList({ items, mode = "magnitude", columns }: Props) {
   if (items.length === 0) {
     return <p className="py-8 text-center text-sm text-zinc-400">No data in this window.</p>;
   }
   const max = Math.max(...items.map((i) => Math.abs(i.value)), 1e-9);
   return (
     <ul className="space-y-2.5">
+      {columns && (
+        <li className="flex items-center gap-3 text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+          <span className="w-28 shrink-0" />
+          <span className="flex-1" />
+          <span className="w-20 shrink-0 text-right">{columns.value}</span>
+          {columns.extra !== undefined && (
+            <span className="w-20 shrink-0 text-right">{columns.extra}</span>
+          )}
+        </li>
+      )}
       {items.map((item) => {
         const frac = Math.abs(item.value) / max;
         const color =
