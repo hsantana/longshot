@@ -42,17 +42,27 @@ function TrendTile({
   formatValue: (v: number) => string;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="whitespace-nowrap text-xs font-medium uppercase tracking-wide text-zinc-400">
             {label}
           </p>
-          <p className={`mt-1.5 text-2xl font-semibold tabular-nums ${valueClass}`}>{value}</p>
+          <p
+            className={`mt-1.5 whitespace-nowrap text-2xl font-semibold tabular-nums ${valueClass}`}
+          >
+            {value}
+          </p>
           <p className="mt-0.5 text-xs text-zinc-400">{hint}</p>
         </div>
-        <div className="w-32 shrink-0 pt-2 sm:w-40">
-          <LineChart data={trend} variant="spark" area formatValue={formatValue} />
+        <div className="w-20 shrink-0">
+          <LineChart
+            data={trend}
+            variant="spark"
+            height={32}
+            area
+            formatValue={formatValue}
+          />
         </div>
       </div>
     </div>
