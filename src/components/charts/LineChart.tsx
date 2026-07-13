@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { TrendPoint } from "@/lib/analytics";
+import { useContainerWidth } from "./useContainerWidth";
 
 interface Props {
   data: TrendPoint[];
@@ -11,16 +12,14 @@ interface Props {
   baseline?: number;
 }
 
-const W = 640;
-const PAD = { top: 12, right: 12, bottom: 24, left: 56 };
+const PAD = { top: 10, right: 10, bottom: 22, left: 58 };
+const TICK_CLASS = "fill-zinc-400 text-[11px]";
 
 function niceTicks(min: number, max: number, n = 4): number[] {
-  if (min === max) {
-    return [min];
-  }
+  if (min === max) return [min];
   const span = max - min;
   const step = Math.pow(10, Math.floor(Math.log10(span / n)));
-  const err = (span / n) / step;
+  const err = span / n / step;
   const mult = err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1;
   const s = step * mult;
   const ticks: number[] = [];
@@ -28,8 +27,27 @@ function niceTicks(min: number, max: number, n = 4): number[] {
   return ticks;
 }
 
-export default function LineChart({ data, height = 220, formatValue, baseline }: Props) {
-  const svgRef = useRef<SVGSVGElement>(null);
+/** Catmull-Rom → cubic bezier for a gently smoothed line. */
+function smoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length === 0) return "";
+  if (pts.length === 1) return `M${pts[0].x},${pts[0].y}`;
+  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += `C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+export default function LineChart({ data, height = 200, formatValue, baseline }: Props) {
+  const [containerRef, measuredWidth] = useContainerWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
 
   if (data.length === 0) {
@@ -40,6 +58,7 @@ export default function LineChart({ data, height = 220, formatValue, baseline }:
     );
   }
 
+  const W = measuredWidth || 560;
   const H = height;
   const xs = data.map((d) => d.ts);
   const ys = data.map((d) => d.value);
@@ -62,22 +81,23 @@ export default function LineChart({ data, height = 220, formatValue, baseline }:
   const y = (v: number) =>
     PAD.top + (1 - (v - yMin) / (yMax - yMin)) * (H - PAD.top - PAD.bottom);
 
-  const path = data
-    .map((d, i) => `${i === 0 ? "M" : "L"}${x(d.ts).toFixed(1)},${y(d.value).toFixed(1)}`)
-    .join("");
+  const pts = data.map((d) => ({ x: x(d.ts), y: y(d.value) }));
+  const path = smoothPath(pts);
 
   const ticks = niceTicks(yMin, yMax);
   const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-  const xTickIdx = data.length <= 4 ? data.map((_, i) => i) : [0, Math.floor((data.length - 1) / 2), data.length - 1];
+  const xTickIdx =
+    data.length <= 4
+      ? data.map((_, i) => i)
+      : [0, Math.floor((data.length - 1) / 2), data.length - 1];
 
-  function onMove(e: React.MouseEvent) {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const fx = ((e.clientX - rect.left) / rect.width) * W;
+  function onMove(e: React.MouseEvent<SVGSVGElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const fx = e.clientX - rect.left;
     let best = 0;
     let bestDist = Infinity;
-    data.forEach((d, i) => {
-      const dist = Math.abs(x(d.ts) - fx);
+    pts.forEach((p, i) => {
+      const dist = Math.abs(p.x - fx);
       if (dist < bestDist) {
         bestDist = dist;
         best = i;
@@ -89,94 +109,89 @@ export default function LineChart({ data, height = 220, formatValue, baseline }:
   const h = hover !== null ? data[hover] : null;
 
   return (
-    <div className="relative">
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full"
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
-        role="img"
-        aria-label="Line chart"
-      >
-        {ticks.map((t) => (
-          <g key={t}>
+    <div ref={containerRef} className="relative">
+      {measuredWidth > 0 && (
+        <svg
+          width={W}
+          height={H}
+          className="block"
+          onMouseMove={onMove}
+          onMouseLeave={() => setHover(null)}
+          role="img"
+          aria-label="Line chart"
+        >
+          {ticks.map((t) => (
+            <g key={t}>
+              <line
+                x1={PAD.left}
+                x2={W - PAD.right}
+                y1={y(t)}
+                y2={y(t)}
+                className="stroke-zinc-200 dark:stroke-zinc-800"
+                strokeWidth={1}
+              />
+              <text x={PAD.left - 8} y={y(t) + 3.5} textAnchor="end" className={TICK_CLASS}>
+                {formatValue(t)}
+              </text>
+            </g>
+          ))}
+          {baseline !== undefined && baseline >= yMin && baseline <= yMax && (
             <line
               x1={PAD.left}
               x2={W - PAD.right}
-              y1={y(t)}
-              y2={y(t)}
-              className="stroke-zinc-200 dark:stroke-zinc-800"
+              y1={y(baseline)}
+              y2={y(baseline)}
+              className="stroke-zinc-400 dark:stroke-zinc-600"
               strokeWidth={1}
+              strokeDasharray="4 3"
             />
+          )}
+          {xTickIdx.map((i) => (
             <text
-              x={PAD.left - 8}
-              y={y(t) + 3.5}
-              textAnchor="end"
-              className="fill-zinc-400 text-[11px]"
+              key={i}
+              x={Math.min(Math.max(x(data[i].ts), PAD.left + 20), W - PAD.right - 20)}
+              y={H - 6}
+              textAnchor="middle"
+              className={TICK_CLASS}
             >
-              {formatValue(t)}
+              {dateFmt.format(new Date(data[i].ts * 1000))}
             </text>
-          </g>
-        ))}
-        {baseline !== undefined && baseline >= yMin && baseline <= yMax && (
-          <line
-            x1={PAD.left}
-            x2={W - PAD.right}
-            y1={y(baseline)}
-            y2={y(baseline)}
-            className="stroke-zinc-400 dark:stroke-zinc-600"
-            strokeWidth={1}
-            strokeDasharray="4 3"
+          ))}
+          <path
+            d={path}
+            fill="none"
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            className="stroke-emerald-600 dark:stroke-emerald-400"
           />
-        )}
-        {xTickIdx.map((i) => (
-          <text
-            key={i}
-            x={x(data[i].ts)}
-            y={H - 6}
-            textAnchor="middle"
-            className="fill-zinc-400 text-[11px]"
-          >
-            {dateFmt.format(new Date(data[i].ts * 1000))}
-          </text>
-        ))}
-        <path
-          d={path}
-          fill="none"
-          strokeWidth={2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          className="stroke-emerald-600 dark:stroke-emerald-400"
-        />
-        {h && (
-          <>
-            <line
-              x1={x(h.ts)}
-              x2={x(h.ts)}
-              y1={PAD.top}
-              y2={H - PAD.bottom}
-              className="stroke-zinc-300 dark:stroke-zinc-700"
-              strokeWidth={1}
-            />
-            <circle
-              cx={x(h.ts)}
-              cy={y(h.value)}
-              r={4.5}
-              className="fill-emerald-600 stroke-white dark:fill-emerald-400 dark:stroke-zinc-900"
-              strokeWidth={2}
-            />
-          </>
-        )}
-      </svg>
+          {h && (
+            <>
+              <line
+                x1={x(h.ts)}
+                x2={x(h.ts)}
+                y1={PAD.top}
+                y2={H - PAD.bottom}
+                className="stroke-zinc-300 dark:stroke-zinc-700"
+                strokeWidth={1}
+              />
+              <circle
+                cx={x(h.ts)}
+                cy={y(h.value)}
+                r={4}
+                className="fill-emerald-600 stroke-white dark:fill-emerald-400 dark:stroke-zinc-900"
+                strokeWidth={2}
+              />
+            </>
+          )}
+        </svg>
+      )}
       {h && (
         <div
           className="pointer-events-none absolute top-1 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs shadow-md dark:border-zinc-700 dark:bg-zinc-800"
-          style={{ left: `${(x(h.ts) / W) * 100}%` }}
+          style={{ left: Math.min(Math.max(x(h.ts), 70), W - 70) }}
         >
-          <span className="text-zinc-400">
-            {dateFmt.format(new Date(h.ts * 1000))}
-          </span>{" "}
+          <span className="text-zinc-400">{dateFmt.format(new Date(h.ts * 1000))}</span>{" "}
           <span className="font-medium tabular-nums">{formatValue(h.value)}</span>
         </div>
       )}

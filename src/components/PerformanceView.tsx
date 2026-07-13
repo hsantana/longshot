@@ -16,28 +16,11 @@ import {
   type TradeLite,
 } from "@/lib/analytics";
 import { formatSignedUsd, formatUsd } from "@/lib/format";
+import Card from "@/components/Card";
 import FilterBar from "@/components/FilterBar";
 import LineChart from "@/components/charts/LineChart";
 import CalendarHeatmap from "@/components/charts/CalendarHeatmap";
 import BarList from "@/components/charts/BarList";
-
-function Card({
-  title,
-  children,
-  subtitle,
-}: {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      {subtitle && <p className="mt-0.5 text-xs text-zinc-400">{subtitle}</p>}
-      <div className="mt-4">{children}</div>
-    </section>
-  );
-}
 
 export default function PerformanceView({
   plays,
@@ -77,16 +60,21 @@ export default function PerformanceView({
     <div className="space-y-4">
       <FilterBar categories={categories} filters={filters} onChange={setFilters} />
 
-      <Card
-        title="Cumulative PnL"
-        subtitle={`${fPlays.length} closed play${fPlays.length === 1 ? "" : "s"} · net ${formatSignedUsd(totalPnl)}`}
-      >
-        <LineChart data={cumulative} formatValue={(v) => formatUsd(v, true)} baseline={0} />
-      </Card>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card
+          title="Cumulative PnL"
+          subtitle={`${fPlays.length} closed play${fPlays.length === 1 ? "" : "s"} · net ${formatSignedUsd(totalPnl)}`}
+        >
+          <LineChart data={cumulative} formatValue={(v) => formatUsd(v, true)} baseline={0} />
+        </Card>
 
-      <Card title="Calendar" subtitle="Days colored by net PnL of plays resolved that day; gray = opened only">
-        <CalendarHeatmap days={days} startSec={startSec} nowSec={nowSec} />
-      </Card>
+        <Card
+          title="Calendar"
+          subtitle="Days colored by net PnL of plays resolved that day; gray = opened only"
+        >
+          <CalendarHeatmap days={days} startSec={startSec} nowSec={nowSec} />
+        </Card>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="Plays by probability band" subtitle="Probability at entry">
