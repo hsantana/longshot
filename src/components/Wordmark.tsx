@@ -1,10 +1,15 @@
-import { BRAND } from "@/config/brand";
+import wordmark from "../../brand/longshot-wordmark.png";
 
-export default function Wordmark({ className = "" }: { className?: string }) {
+// The wordmark is a brand asset (see brand/README.md), not part of the MIT
+// license. It's a black cursive mark on transparent, inverted to near-white in
+// dark mode. Forks: swap the import above and the brand config.
+export default function Wordmark({ className = "h-8" }: { className?: string }) {
   return (
-    <span className={`font-bold tracking-tight ${className}`}>
-      {BRAND.name}
-      <span className="text-emerald-500">{BRAND.wordmarkAccent}</span>
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={wordmark.src}
+      alt="longshot"
+      className={`w-auto dark:invert ${className}`}
+    />
   );
 }

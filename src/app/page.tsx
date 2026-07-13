@@ -6,8 +6,8 @@ export default function Home() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-24">
       <div className="w-full max-w-xl text-center">
-        <h1 className="text-5xl">
-          <Wordmark />
+        <h1>
+          <Wordmark className="mx-auto h-[120px]" />
         </h1>
         <p className="mt-4 text-lg text-zinc-500 dark:text-zinc-400">
           {BRAND.tagline}

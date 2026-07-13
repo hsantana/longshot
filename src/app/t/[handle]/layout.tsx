@@ -37,8 +37,8 @@ export default async function TrackerLayout({
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <Link href="/" className="text-xl text-zinc-900 dark:text-zinc-100">
-          <Wordmark />
+        <Link href="/" className="shrink-0">
+          <Wordmark className="h-12" />
         </Link>
         <div className="w-full sm:max-w-md">
           <SearchBox compact />
