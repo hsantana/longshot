@@ -7,5 +7,10 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
-  }
+  },
+  "routes": [
+    { "pattern": "longshot.market", "custom_domain": true },
+    { "pattern": "www.longshot.market", "custom_domain": true }
+  ],
+  "workers_dev": true
 }
