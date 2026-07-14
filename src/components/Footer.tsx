@@ -5,7 +5,7 @@ export default function Footer() {
     <footer className="border-t border-zinc-200 dark:border-zinc-800">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-5 text-xs text-zinc-400">
         <p>
-          Built by <span className="font-medium text-zinc-500 dark:text-zinc-300">{BRAND.creator}</span>
+          Built by <span className="font-medium text-zinc-500 dark:text-zinc-300">{BRAND.creator}</span> · 2026
         </p>
         <a
           href={BRAND.repoUrl}

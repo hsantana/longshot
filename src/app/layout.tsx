@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: `${BRAND.name} — Polymarket performance tracker`,
-  description: `${BRAND.tagline} Open source, no login required.`,
+  description: `${BRAND.tagline}. Open source, no login required.`,
   icons: {
     icon: [
       { url: favicon16.src, sizes: "16x16", type: "image/png" },

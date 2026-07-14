@@ -10,8 +10,7 @@ export const BRAND = {
   /** Accent character appended to the name in the wordmark. */
   wordmarkAccent: ".",
   /** Short description used in page metadata and the home page. */
-  tagline:
-    "Performance tracker for Polymarket traders. Look up any account's open positions, closed positions, and PnL.",
+  tagline: "Performance & strategy tracker for Polymarket traders",
   /** Source repository shown in the footer/home page. */
   repoUrl: "https://github.com/hsantana/longshot",
   /** Creator credit shown in the global footer. */

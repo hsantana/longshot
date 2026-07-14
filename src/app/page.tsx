@@ -15,15 +15,6 @@ export default function Home() {
         <div className="mt-10">
           <SearchBox autoFocus />
         </div>
-        <p className="mt-6 text-sm text-zinc-400 dark:text-zinc-500">
-          Public on-chain data · No login required ·{" "}
-          <a
-            href={BRAND.repoUrl}
-            className="underline decoration-zinc-300 underline-offset-4 transition hover:text-zinc-600 dark:decoration-zinc-600 dark:hover:text-zinc-300"
-          >
-            Open source
-          </a>
-        </p>
       </div>
     </main>
   );
