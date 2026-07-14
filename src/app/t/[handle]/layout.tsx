@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import SearchBox from "@/components/SearchBox";
 import Wordmark from "@/components/Wordmark";
 import TabNav from "@/components/TabNav";
+import ThemeToggle from "@/components/ThemeToggle";
 import { getAccount } from "@/lib/polymarket";
 import { shortAddress } from "@/lib/format";
 import { BRAND } from "@/config/brand";
@@ -36,7 +37,7 @@ export default async function TrackerLayout({
 
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-center">
+      <header className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
         <Link href="/" className="shrink-0 sm:flex-1">
           <Wordmark className="h-[53px]" />
         </Link>
@@ -44,6 +45,7 @@ export default async function TrackerLayout({
           <SearchBox compact />
         </div>
         <div className="hidden sm:block sm:flex-1" />
+        <ThemeToggle className="absolute right-0 top-0" />
       </header>
 
       {!account ? (

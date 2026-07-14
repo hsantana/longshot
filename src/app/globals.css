@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Class-based dark mode (not media-query) so account pages can override the
+ * OS preference with a manual toggle; see src/lib/theme.ts. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #fafafa;
   --foreground: #18181b;
@@ -12,11 +16,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --foreground: #e4e4e7;
-  }
+.dark {
+  --background: #09090b;
+  --foreground: #e4e4e7;
 }
 
 body {

@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { BRAND } from "@/config/brand";
 import Footer from "@/components/Footer";
+import ThemeSync from "@/components/ThemeSync";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import favicon16 from "../../brand/longshot-favicon-16.png";
 import favicon32 from "../../brand/longshot-favicon-32.png";
 import icon512 from "../../brand/longshot-icon-512.png";
@@ -38,9 +41,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <Script id="theme-init" strategy="beforeInteractive">
+          {THEME_INIT_SCRIPT}
+        </Script>
+      </head>
       <body className="min-h-full flex flex-col">
+        <ThemeSync />
         {children}
         <Footer />
       </body>
