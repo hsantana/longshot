@@ -12,7 +12,7 @@ function Tagline({ text }: { text: string }) {
         part === "Polymarket" ? (
           <span
             key={i}
-            className="bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text font-medium text-transparent"
+            className="bg-gradient-to-r from-blue-400/70 to-blue-600/70 bg-clip-text text-transparent"
           >
             {part}
           </span>
