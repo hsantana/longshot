@@ -159,33 +159,62 @@ const USDC_CONTRACTS = [
   "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", // USDC.e (Polymarket collateral)
   "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", // native USDC
 ];
-const POLYGON_RPC = "https://polygon-rpc.com";
 
-/** Wallet USDC balance ("Cash") read from the Polygon chain. Null when the RPC fails. */
+// Public RPC endpoints, tried in order. polygon-rpc.com now rejects anonymous
+// requests (401, "tenant disabled"), so it isn't listed; keep several
+// alternatives since any single free provider can go down or start requiring
+// a key at any time.
+const POLYGON_RPCS = [
+  "https://polygon.drpc.org",
+  "https://1rpc.io/matic",
+  "https://polygon-bor-rpc.publicnode.com",
+];
+
+async function ethCallBalanceOf(
+  rpc: string,
+  contract: string,
+  address: string
+): Promise<number> {
+  const res = await fetch(rpc, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_call",
+      params: [
+        { to: contract, data: `0x70a08231${address.slice(2).padStart(64, "0")}` },
+        "latest",
+      ],
+    }),
+  });
+  const data = (await res.json()) as { result?: string; error?: unknown };
+  // A real RPC error (missing/invalid result) must not be read as a zero
+  // balance — throw so the caller can fall back to the next endpoint.
+  if (!res.ok || !data.result) {
+    throw new Error(`RPC ${rpc} failed: ${res.status} ${JSON.stringify(data.error ?? data)}`);
+  }
+  return parseInt(data.result, 16) / 1e6;
+}
+
+async function balanceOfWithFallback(contract: string, address: string): Promise<number> {
+  let lastError: unknown;
+  for (const rpc of POLYGON_RPCS) {
+    try {
+      return await ethCallBalanceOf(rpc, contract, address);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+/** Wallet USDC balance ("Cash") read from the Polygon chain. Null when every RPC fails. */
 export async function getUsdcBalance(address: string): Promise<number | null> {
   try {
     const balances = await Promise.all(
-      USDC_CONTRACTS.map(async (contract) => {
-        const res = await fetch(POLYGON_RPC, {
-          method: "POST",
-          cache: "no-store",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "eth_call",
-            params: [
-              {
-                to: contract,
-                data: `0x70a08231${address.slice(2).padStart(64, "0")}`,
-              },
-              "latest",
-            ],
-          }),
-        });
-        const data = (await res.json()) as { result?: string };
-        return data.result ? parseInt(data.result, 16) / 1e6 : 0;
-      })
+      USDC_CONTRACTS.map((contract) => balanceOfWithFallback(contract, address))
     );
     return balances.reduce((a, b) => a + b, 0);
   } catch {
