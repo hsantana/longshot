@@ -71,7 +71,7 @@ function Th({
 
 const td = "whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums";
 
-function OpenTable({ positions }: { positions: OpenPosition[] }) {
+function PositionsTable({ positions }: { positions: OpenPosition[] }) {
   if (positions.length === 0) {
     return <Empty label="No open positions." />;
   }
@@ -188,8 +188,8 @@ export default function PositionTables({
   openPositions: OpenPosition[];
   closedPositions: ClosedPosition[];
 }) {
-  const [tab, setTab] = useState<"open" | "closed">(
-    openPositions.length > 0 ? "open" : "closed"
+  const [tab, setTab] = useState<"positions" | "closed">(
+    openPositions.length > 0 ? "positions" : "closed"
   );
 
   return (
@@ -197,7 +197,7 @@ export default function PositionTables({
       <div className="flex items-center gap-1 border-b border-zinc-200 px-3 pt-3 dark:border-zinc-800">
         {(
           [
-            ["open", `Open (${openPositions.length})`],
+            ["positions", `Positions (${openPositions.length})`],
             ["closed", `Closed (${closedPositions.length})`],
           ] as const
         ).map(([key, label]) => (
@@ -220,8 +220,8 @@ export default function PositionTables({
           </span>
         )}
       </div>
-      {tab === "open" ? (
-        <OpenTable positions={openPositions} />
+      {tab === "positions" ? (
+        <PositionsTable positions={openPositions} />
       ) : (
         <ClosedTable positions={closedPositions} />
       )}
