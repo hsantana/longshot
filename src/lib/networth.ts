@@ -24,10 +24,14 @@ import type { TrendPoint } from "./analytics";
 
 const DAY = 86400;
 
-// Cloudflare Workers cap subrequests per request; price history is one fetch
-// per distinct asset, so this is kept well under that budget alongside
-// everything else the Portfolio page already fetches.
-const MAX_PRICED_ASSETS = 20;
+// Each distinct asset ever held costs one price-history subrequest. Cloudflare
+// caps subrequests per request (50 on the Bundled/free plan, 1,000 on paid),
+// and the Portfolio page already spends ~20-30 subrequests before this. Set to
+// 100: fully covers ordinary accounts, and for very active traders (hundreds
+// of distinct markets) it degrades gracefully — assets past the ceiling get a
+// caught, empty fetch and contribute $0, same as being capped. Genuinely
+// removing the limit needs precomputed/stored price history, not a bigger cap.
+const MAX_PRICED_ASSETS = 100;
 
 function dayFloor(ts: number): number {
   return Math.floor(ts / DAY) * DAY;
