@@ -156,8 +156,9 @@ export async function getTrades(address: string, cap = 3000): Promise<Trade[]> {
 }
 
 const USDC_CONTRACTS = [
-  "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", // USDC.e (Polymarket collateral)
-  "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", // native USDC
+  "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB", // pUSD — Polymarket's current collateral token, 1:1 USDC-backed
+  "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", // USDC.e — legacy collateral, pre-pUSD migration
+  "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", // native USDC — included in case of stray balances
 ];
 
 // Public RPC endpoints, tried in order. polygon-rpc.com now rejects anonymous
