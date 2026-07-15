@@ -74,10 +74,38 @@ export interface Trade {
   price: number;
   timestamp: number;
   conditionId: string;
+  asset: string;
   outcomeIndex: number;
   outcome: string;
   title: string;
   eventSlug: string;
+}
+
+/** Any activity row (trade, redemption, yield, deposit, ...); see ActivityType. */
+export type ActivityType =
+  | "TRADE"
+  | "SPLIT"
+  | "MERGE"
+  | "REDEEM"
+  | "REWARD"
+  | "CONVERSION"
+  | "DEPOSIT"
+  | "WITHDRAWAL"
+  | "YIELD"
+  | "MAKER_REBATE"
+  | "TAKER_REBATE"
+  | "REFERRAL_REWARD";
+
+export interface Activity {
+  type: ActivityType;
+  side: "BUY" | "SELL" | "";
+  usdcSize: number;
+  size: number;
+  price: number;
+  timestamp: number;
+  conditionId: string;
+  asset: string;
+  outcomeIndex: number;
 }
 
 export function isAddress(s: string): boolean {
@@ -153,6 +181,32 @@ export async function getTrades(address: string, cap = 3000): Promise<Trade[]> {
     if (page.length < pageSize) break;
   }
   return trades;
+}
+
+/** Every activity row (trades, redemptions, yield, deposits, ...), most recent first. */
+export async function getFullActivity(address: string, cap = 5000): Promise<Activity[]> {
+  const pageSize = 500;
+  const rows: Activity[] = [];
+  for (let offset = 0; offset < cap; offset += pageSize) {
+    const page = await getJSON<Activity[]>(
+      `${DATA_API}/activity?user=${address}&limit=${pageSize}&offset=${offset}&sortBy=TIMESTAMP&sortDirection=DESC`
+    ).catch(() => [] as Activity[]);
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+const CLOB_API = "https://clob.polymarket.com";
+
+/** Daily price history (0..1) for a CLOB token id, oldest first. */
+export async function getPriceHistory(
+  assetId: string
+): Promise<{ t: number; p: number }[]> {
+  const data = await getJSON<{ history: { t: number; p: number }[] }>(
+    `${CLOB_API}/prices-history?market=${assetId}&interval=max&fidelity=1440`
+  ).catch(() => ({ history: [] }));
+  return data.history;
 }
 
 const USDC_CONTRACTS = [
@@ -388,3 +442,4 @@ export const cachedResolveHandle = cache(resolveHandle);
 export const getAccount = cache(getAccountUncached);
 export const cachedGetTrades = cache(getTrades);
 export const cachedGetUsdcBalance = cache(getUsdcBalance);
+export const cachedGetFullActivity = cache(getFullActivity);

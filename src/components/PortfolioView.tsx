@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from "react";
 import type { AccountSummary, ClosedPosition, OpenPosition } from "@/lib/polymarket";
-import { bandOf, type BandKey } from "@/lib/analytics";
+import type { NetWorthHistory } from "@/lib/networth";
+import { bandOf, windowStart, type BandKey, type TrendPoint } from "@/lib/analytics";
 import { formatSignedUsd, formatUsd, pnlColor } from "@/lib/format";
 import PositionTables from "@/components/PositionTables";
+import Card from "@/components/Card";
+import NetWorthChart from "@/components/charts/NetWorthChart";
 import PortfolioFilterBar, {
   DEFAULT_PORTFOLIO_FILTERS,
   type PortfolioFilters,
@@ -54,6 +57,10 @@ function isClosingSoon(endDate: string, nowMs: number): boolean {
   return !isNaN(end) && end - nowMs < SOON_MS;
 }
 
+function sliceFrom(series: TrendPoint[], startSec: number): TrendPoint[] {
+  return startSec <= 0 ? series : series.filter((p) => p.ts >= startSec);
+}
+
 export default function PortfolioView({
   summary,
   openPositions,
@@ -61,6 +68,7 @@ export default function PortfolioView({
   cash,
   categories,
   categoryList,
+  netWorth,
 }: {
   summary: AccountSummary;
   openPositions: OpenPosition[];
@@ -68,9 +76,25 @@ export default function PortfolioView({
   cash: number | null;
   categories: Record<string, string>;
   categoryList: string[];
+  netWorth: NetWorthHistory | null;
 }) {
   const [filters, setFilters] = useState<PortfolioFilters>(DEFAULT_PORTFOLIO_FILTERS);
   const nowMs = useMemo(() => Date.now(), []);
+  const nowSec = Math.floor(nowMs / 1000);
+
+  const chartStart = windowStart(filters.dateKey, nowSec);
+  const chartCash = useMemo(
+    () => (netWorth ? sliceFrom(netWorth.cash, chartStart) : []),
+    [netWorth, chartStart]
+  );
+  const chartValue = useMemo(
+    () => (netWorth ? sliceFrom(netWorth.value, chartStart) : []),
+    [netWorth, chartStart]
+  );
+  const chartTotal = useMemo(
+    () => (netWorth ? sliceFrom(netWorth.total, chartStart) : []),
+    [netWorth, chartStart]
+  );
 
   const filteredOpen = useMemo(
     () =>
@@ -122,6 +146,28 @@ export default function PortfolioView({
             hint="Across open positions"
           />
         </section>
+
+        <Card
+          title="Net worth"
+          subtitle={
+            netWorth?.truncated
+              ? "Cash + portfolio value over time. Value covers your largest/most recent positions only — this account has held more assets than we chart."
+              : "Cash + portfolio value over time"
+          }
+        >
+          {netWorth ? (
+            <NetWorthChart
+              cash={chartCash}
+              value={chartValue}
+              total={chartTotal}
+              formatValue={(v) => formatUsd(v, true)}
+            />
+          ) : (
+            <p className="flex items-center justify-center py-12 text-sm text-zinc-400">
+              Not available right now.
+            </p>
+          )}
+        </Card>
 
         <PositionTables
           openPositions={filteredOpen}

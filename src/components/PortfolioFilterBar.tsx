@@ -1,6 +1,6 @@
 "use client";
 
-import { BANDS, type BandKey } from "@/lib/analytics";
+import { BANDS, DATE_PRESETS, type BandKey, type DateKey } from "@/lib/analytics";
 import { chipClass as chip } from "@/lib/ui";
 
 export interface PortfolioFilters {
@@ -8,6 +8,8 @@ export interface PortfolioFilters {
   result: "all" | "winning" | "losing";
   closing: "all" | "soon";
   bands: BandKey[]; // empty = all bands
+  /** Only drives the net-worth chart's time range — tables ignore this. */
+  dateKey: DateKey;
 }
 
 export const DEFAULT_PORTFOLIO_FILTERS: PortfolioFilters = {
@@ -15,6 +17,7 @@ export const DEFAULT_PORTFOLIO_FILTERS: PortfolioFilters = {
   result: "all",
   closing: "all",
   bands: [],
+  dateKey: "all",
 };
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
@@ -46,6 +49,19 @@ export default function PortfolioFilterBar({
 
   return (
     <div className="space-y-5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <Group label="Dates">
+        {DATE_PRESETS.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            onClick={() => onChange({ ...filters, dateKey: p.key })}
+            className={chip(filters.dateKey === p.key)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </Group>
+
       <Group label="Markets">
         <select
           value={filters.category}
