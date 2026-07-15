@@ -1,23 +1,20 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { TrendPoint } from "@/lib/analytics";
 import { useContainerWidth } from "./useContainerWidth";
 import { smoothPath } from "./smoothPath";
 
-interface Series {
-  key: string;
-  label: string;
-  data: TrendPoint[];
-  /** Tailwind stroke/fill color classes. */
-  stroke: string;
-  fill?: string;
-  dot: string;
-}
-
 const PAD = { top: 10, right: 10, bottom: 22, left: 58 };
 const H = 240;
 const TICK_CLASS = "fill-zinc-400 text-[11px]";
+
+const CASH_STROKE = "stroke-sky-500 dark:stroke-sky-400";
+const CASH_FILL = "fill-sky-500/60 dark:fill-sky-400/50";
+const CASH_DOT = "bg-sky-500 dark:bg-sky-400";
+const VALUE_STROKE = "stroke-violet-500 dark:stroke-violet-400";
+const VALUE_FILL = "fill-violet-500/60 dark:fill-violet-400/50";
+const VALUE_DOT = "bg-violet-500 dark:bg-violet-400";
 
 function niceTicks(min: number, max: number, n = 4): number[] {
   if (min === max) return [min];
@@ -31,28 +28,22 @@ function niceTicks(min: number, max: number, n = 4): number[] {
   return ticks;
 }
 
+/** Cash and Portfolio Value are stacked (Value sits on top of Cash), so the
+ * combined top edge reads as the total without drawing a third series. */
 export default function NetWorthChart({
   cash,
   value,
-  total,
   formatValue,
 }: {
   cash: TrendPoint[];
   value: TrendPoint[];
-  total: TrendPoint[];
   formatValue: (v: number) => string;
 }) {
   const [containerRef, measuredWidth] = useContainerWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
-  const gradientId = useId();
 
-  const series: Series[] = [
-    { key: "cash", label: "Cash", data: cash, stroke: "stroke-sky-500 dark:stroke-sky-400", dot: "bg-sky-500 dark:bg-sky-400" },
-    { key: "value", label: "Portfolio Value", data: value, stroke: "stroke-violet-500 dark:stroke-violet-400", dot: "bg-violet-500 dark:bg-violet-400" },
-    { key: "total", label: "Total", data: total, stroke: "stroke-emerald-600 dark:stroke-emerald-400", fill: `url(#${gradientId})`, dot: "bg-emerald-600 dark:bg-emerald-400" },
-  ];
-
-  if (total.length === 0) {
+  const n = Math.min(cash.length, value.length);
+  if (n === 0) {
     return (
       <p className="flex items-center justify-center py-12 text-sm text-zinc-400">
         Not enough history to chart yet.
@@ -60,14 +51,19 @@ export default function NetWorthChart({
     );
   }
 
+  const points = Array.from({ length: n }, (_, i) => ({
+    ts: cash[i].ts,
+    cash: cash[i].value,
+    value: value[i].value,
+    total: cash[i].value + value[i].value,
+  }));
+
   const W = measuredWidth || 560;
-  const allPoints = [...cash, ...value, ...total];
-  const xs = allPoints.map((d) => d.ts);
-  const ys = allPoints.map((d) => d.value);
+  const xs = points.map((p) => p.ts);
   const xMin = Math.min(...xs);
   const xMax = Math.max(...xs);
-  let yMin = Math.min(0, ...ys);
-  let yMax = Math.max(...ys);
+  let yMin = Math.min(0, ...points.map((p) => Math.min(p.cash, 0)));
+  let yMax = Math.max(...points.map((p) => p.total));
   if (yMin === yMax) {
     yMin -= 1;
     yMax += 1;
@@ -84,19 +80,39 @@ export default function NetWorthChart({
     PAD.top + (1 - (v - yMin) / (yMax - yMin)) * (H - PAD.top - PAD.bottom);
 
   const ticks = niceTicks(yMin, yMax);
-  const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-  const total_ = total;
+  const dateFmt = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
   const xTickIdx =
-    total_.length <= 4
-      ? total_.map((_, i) => i)
-      : [0, Math.floor((total_.length - 1) / 2), total_.length - 1];
+    points.length <= 4
+      ? points.map((_, i) => i)
+      : [0, Math.floor((points.length - 1) / 2), points.length - 1];
+
+  const cashPts = points.map((p) => ({ x: x(p.ts), y: y(p.cash) }));
+  const totalPts = points.map((p) => ({ x: x(p.ts), y: y(p.total) }));
+  const zeroY = y(0);
+
+  const cashPath = smoothPath(cashPts);
+  const cashArea = `${cashPath}L${cashPts[cashPts.length - 1].x.toFixed(1)},${zeroY}L${cashPts[0].x.toFixed(1)},${zeroY}Z`;
+
+  const totalPath = smoothPath(totalPts);
+  // Stack Value on top of Cash: fill the band between the cash line and the
+  // combined (cash+value) line by tracing the total path forward, then the
+  // cash path backward.
+  const valueArea = `${totalPath}L${cashPts[cashPts.length - 1].x.toFixed(1)},${cashPts[cashPts.length - 1].y.toFixed(1)}${[...cashPts]
+    .reverse()
+    .slice(1)
+    .map((p) => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join("")}Z`;
 
   function onMove(e: React.MouseEvent<SVGSVGElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
     const fx = e.clientX - rect.left;
     let best = 0;
     let bestDist = Infinity;
-    total_.forEach((p, i) => {
+    points.forEach((p, i) => {
       const dist = Math.abs(x(p.ts) - fx);
       if (dist < bestDist) {
         bestDist = dist;
@@ -106,15 +122,7 @@ export default function NetWorthChart({
     setHover(best);
   }
 
-  const hoverTs = hover !== null ? total_[hover]?.ts : null;
-  const hoverRows =
-    hoverTs !== null
-      ? series.map((s) => ({
-          label: s.label,
-          dot: s.dot,
-          value: s.data.find((p) => p.ts === hoverTs)?.value ?? s.data[s.data.length - 1]?.value ?? 0,
-        }))
-      : null;
+  const h = hover !== null ? points[hover] : null;
 
   return (
     <div ref={containerRef} className="relative">
@@ -126,14 +134,8 @@ export default function NetWorthChart({
           onMouseMove={onMove}
           onMouseLeave={() => setHover(null)}
           role="img"
-          aria-label="Cash, portfolio value, and total over time"
+          aria-label="Cash and portfolio value, stacked, over time"
         >
-          <defs>
-            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-emerald-500)" stopOpacity={0.18} />
-              <stop offset="100%" stopColor="var(--color-emerald-500)" stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
           {ticks.map((t) => (
             <g key={t}>
               <line
@@ -152,89 +154,83 @@ export default function NetWorthChart({
           {xTickIdx.map((i) => (
             <text
               key={i}
-              x={Math.min(Math.max(x(total_[i].ts), PAD.left + 20), W - PAD.right - 20)}
+              x={Math.min(Math.max(x(points[i].ts), PAD.left + 30), W - PAD.right - 30)}
               y={H - 6}
               textAnchor="middle"
               className={TICK_CLASS}
             >
-              {dateFmt.format(new Date(total_[i].ts * 1000))}
+              {dateFmt.format(new Date(points[i].ts * 1000))}
             </text>
           ))}
 
-          {series.map((s) => {
-            if (s.data.length === 0) return null;
-            const pts = s.data.map((d) => ({ x: x(d.ts), y: y(d.value) }));
-            const path = smoothPath(pts);
-            const bottomY = H - PAD.bottom;
-            const areaPath = s.fill
-              ? `${path}L${pts[pts.length - 1].x.toFixed(1)},${bottomY}L${pts[0].x.toFixed(1)},${bottomY}Z`
-              : null;
-            return (
-              <g key={s.key}>
-                {areaPath && <path d={areaPath} fill={s.fill} />}
-                <path
-                  d={path}
-                  fill="none"
-                  strokeWidth={s.key === "total" ? 2 : 1.5}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  className={s.stroke}
-                />
-              </g>
-            );
-          })}
+          <path d={valueArea} className={VALUE_FILL} />
+          <path d={cashArea} className={CASH_FILL} />
+          <path
+            d={cashPath}
+            fill="none"
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            className={CASH_STROKE}
+          />
+          <path
+            d={totalPath}
+            fill="none"
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            className={VALUE_STROKE}
+          />
 
-          {hoverTs !== null && (
-            <line
-              x1={x(hoverTs)}
-              x2={x(hoverTs)}
-              y1={PAD.top}
-              y2={H - PAD.bottom}
-              className="stroke-zinc-300 dark:stroke-zinc-700"
-              strokeWidth={1}
-            />
+          {h && (
+            <>
+              <line
+                x1={x(h.ts)}
+                x2={x(h.ts)}
+                y1={PAD.top}
+                y2={H - PAD.bottom}
+                className="stroke-zinc-300 dark:stroke-zinc-700"
+                strokeWidth={1}
+              />
+              <circle cx={x(h.ts)} cy={y(h.cash)} r={3.5} className={`${CASH_DOT} stroke-white dark:stroke-zinc-900`} strokeWidth={2} />
+              <circle cx={x(h.ts)} cy={y(h.total)} r={3.5} className={`${VALUE_DOT} stroke-white dark:stroke-zinc-900`} strokeWidth={2} />
+            </>
           )}
-          {hoverTs !== null &&
-            series.map((s) => {
-              const pt = s.data.find((p) => p.ts === hoverTs);
-              if (!pt) return null;
-              return (
-                <circle
-                  key={s.key}
-                  cx={x(pt.ts)}
-                  cy={y(pt.value)}
-                  r={s.key === "total" ? 4.5 : 3.5}
-                  className={`${s.dot} stroke-white dark:stroke-zinc-900`}
-                  strokeWidth={2}
-                />
-              );
-            })}
         </svg>
       )}
-      {hoverRows && hoverTs !== null && (
+      {h && (
         <div
           className="pointer-events-none absolute top-1 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs shadow-md dark:border-zinc-700 dark:bg-zinc-800"
-          style={{ left: Math.min(Math.max(x(hoverTs), 90), W - 90) }}
+          style={{ left: Math.min(Math.max(x(h.ts), 90), W - 90) }}
         >
           <p className="mb-1 font-medium text-zinc-500 dark:text-zinc-400">
-            {dateFmt.format(new Date(hoverTs * 1000))}
+            {dateFmt.format(new Date(h.ts * 1000))}
           </p>
-          {hoverRows.map((r) => (
-            <p key={r.label} className="flex items-center gap-1.5">
-              <span className={`h-2 w-2 shrink-0 rounded-full ${r.dot}`} />
-              <span className="text-zinc-500 dark:text-zinc-400">{r.label}</span>
-              <span className="ml-auto font-medium tabular-nums">{formatValue(r.value)}</span>
-            </p>
-          ))}
+          <p className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${CASH_DOT}`} />
+            <span className="text-zinc-500 dark:text-zinc-400">Cash</span>
+            <span className="ml-auto font-medium tabular-nums">{formatValue(h.cash)}</span>
+          </p>
+          <p className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${VALUE_DOT}`} />
+            <span className="text-zinc-500 dark:text-zinc-400">Portfolio Value</span>
+            <span className="ml-auto font-medium tabular-nums">{formatValue(h.value)}</span>
+          </p>
+          <p className="mt-1 flex items-center gap-1.5 border-t border-zinc-100 pt-1 dark:border-zinc-700">
+            <span className="text-zinc-500 dark:text-zinc-400">Total</span>
+            <span className="ml-auto font-semibold tabular-nums">{formatValue(h.total)}</span>
+          </p>
         </div>
       )}
       <div className="mt-3 flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
-        {series.map((s) => (
-          <span key={s.key} className="flex items-center gap-1.5">
-            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.dot}`} />
-            {s.label}
-          </span>
-        ))}
+        <span className="flex items-center gap-1.5">
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${CASH_DOT}`} />
+          Cash
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${VALUE_DOT}`} />
+          Portfolio Value
+        </span>
       </div>
     </div>
   );

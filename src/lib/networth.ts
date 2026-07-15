@@ -10,9 +10,13 @@
 // - Portfolio value: for every asset ever held (open or since-closed), pull
 //   its daily price history from the CLOB and its own trade history (to
 //   reconstruct shares held per day), multiply and sum across assets. A
-//   closed position's contribution stops at its close date even if the
-//   trade-derived share count would otherwise persist (covers positions
-//   exited by redemption rather than a sell trade).
+//   closed position's contribution stops at its close date. For the tail end
+//   of a closed position, the CLOB's price-history often trails off just
+//   short of the true settled price (e.g. 0.0045 instead of an eliminated
+//   team's real 0) rather than hard-stopping at resolution — past the last
+//   available history point, the position's own known final price (from
+//   ClosedPosition.curPrice) is used instead, so a large stale share count
+//   times a near-zero-but-not-zero price can't inflate the total.
 
 import type { Activity, ClosedPosition, OpenPosition } from "./polymarket";
 import { getPriceHistory } from "./polymarket";
@@ -83,6 +87,8 @@ interface AssetInfo {
   asset: string;
   /** null = still open (value counts through today). */
   closedAtSec: number | null;
+  /** Known final settled price for closed assets; overrides stale price-history tails. */
+  finalPrice: number | null;
 }
 
 function collectAssets(
@@ -94,10 +100,12 @@ function collectAssets(
   // Closed first, then open overwrites (an asset held again after a full
   // exit should count as currently open, not stopped at the earlier close).
   for (const p of closed) {
-    if (!byAsset.has(p.asset)) byAsset.set(p.asset, { asset: p.asset, closedAtSec: p.timestamp });
+    if (!byAsset.has(p.asset)) {
+      byAsset.set(p.asset, { asset: p.asset, closedAtSec: p.timestamp, finalPrice: p.curPrice });
+    }
   }
   for (const p of open) {
-    byAsset.set(p.asset, { asset: p.asset, closedAtSec: null });
+    byAsset.set(p.asset, { asset: p.asset, closedAtSec: null, finalPrice: null });
   }
 
   const all = [...byAsset.values()];
@@ -123,6 +131,8 @@ async function assetValueByDay(
   const sortedTrades = [...trades].sort((a, b) => a.timestamp - b.timestamp);
   const priceByDay = new Map<number, number>();
   for (const pt of history) priceByDay.set(dayFloor(pt.t), pt.p);
+  const lastHistoryDay = history.length > 0 ? dayFloor(history[history.length - 1].t) : null;
+
   const sharesByDay = new Map<number, number>();
   let shares = 0;
   for (const t of sortedTrades) {
@@ -136,7 +146,11 @@ async function assetValueByDay(
   let runningPrice = history.length > 0 ? history[0].p : 0;
   for (let day = startDay; day <= endDay; day += DAY) {
     runningShares = sharesByDay.get(day) ?? runningShares;
-    runningPrice = priceByDay.get(day) ?? runningPrice;
+    if (info.finalPrice !== null && (lastHistoryDay === null || day > lastHistoryDay)) {
+      runningPrice = info.finalPrice;
+    } else {
+      runningPrice = priceByDay.get(day) ?? runningPrice;
+    }
     contribution.set(day, runningShares * runningPrice);
   }
   return contribution;
@@ -145,7 +159,6 @@ async function assetValueByDay(
 export interface NetWorthHistory {
   cash: TrendPoint[];
   value: TrendPoint[];
-  total: TrendPoint[];
   /** True when more assets were ever held than the price-history fetch cap. */
   truncated: boolean;
 }
@@ -189,16 +202,5 @@ export async function buildNetWorthHistory(
     value.push({ ts: day, value: runningValue });
   }
 
-  const cashByTs = new Map(cash.map((p) => [p.ts, p.value]));
-  const valueByTs = new Map(value.map((p) => [p.ts, p.value]));
-  const total: TrendPoint[] = [];
-  let lastCash = 0;
-  let lastValue = 0;
-  for (let day = startDay; day <= endDay; day += DAY) {
-    lastCash = cashByTs.get(day) ?? lastCash;
-    lastValue = valueByTs.get(day) ?? lastValue;
-    total.push({ ts: day, value: lastCash + lastValue });
-  }
-
-  return { cash, value, total, truncated };
+  return { cash, value, truncated };
 }

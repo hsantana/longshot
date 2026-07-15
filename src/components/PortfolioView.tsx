@@ -91,10 +91,6 @@ export default function PortfolioView({
     () => (netWorth ? sliceFrom(netWorth.value, chartStart) : []),
     [netWorth, chartStart]
   );
-  const chartTotal = useMemo(
-    () => (netWorth ? sliceFrom(netWorth.total, chartStart) : []),
-    [netWorth, chartStart]
-  );
 
   const filteredOpen = useMemo(
     () =>
@@ -147,19 +143,11 @@ export default function PortfolioView({
           />
         </section>
 
-        <Card
-          title="Net worth"
-          subtitle={
-            netWorth?.truncated
-              ? "Cash + portfolio value over time. Value covers your largest/most recent positions only — this account has held more assets than we chart."
-              : "Cash + portfolio value over time"
-          }
-        >
+        <Card title="Net worth" subtitle="Cash + portfolio value over time">
           {netWorth ? (
             <NetWorthChart
               cash={chartCash}
               value={chartValue}
-              total={chartTotal}
               formatValue={(v) => formatUsd(v, true)}
             />
           ) : (
