@@ -347,6 +347,51 @@ export async function getCategories(
   return result;
 }
 
+// Resolution timestamp (unix seconds) per conditionId, from Gamma market
+// metadata — so resolved-but-unredeemed positions are dated on the day their
+// market actually resolved, not today.
+const resolutionCache = new Map<string, number>();
+
+export async function getMarketResolutions(
+  conditionIds: string[],
+  maxIds = 60
+): Promise<Map<string, number>> {
+  const unique = [...new Set(conditionIds.filter(Boolean))];
+  const missing = unique.filter((id) => !resolutionCache.has(id)).slice(0, maxIds);
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < missing.length; i += 20) chunks.push(missing.slice(i, i + 20));
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const qs = chunk.map((id) => `condition_ids=${id}`).join("&");
+      try {
+        const markets = await getJSON<
+          { conditionId: string; closedTime?: string; umaEndDate?: string }[]
+        >(`${GAMMA_API}/markets?${qs}&closed=true`);
+        for (const m of markets) {
+          // closedTime is "YYYY-MM-DD HH:MM:SS+00"; normalize to ISO. Fall
+          // back to umaEndDate (already ISO, same value).
+          const raw = (m.closedTime ?? m.umaEndDate ?? "")
+            .replace(" ", "T")
+            .replace(/\+00$/, "Z");
+          const sec = Math.floor(Date.parse(raw) / 1000);
+          if (!isNaN(sec) && sec > 0) resolutionCache.set(m.conditionId, sec);
+        }
+      } catch {
+        // leave uncached; caller falls back to the endDate cap
+      }
+    })
+  );
+
+  const result = new Map<string, number>();
+  for (const id of unique) {
+    const v = resolutionCache.get(id);
+    if (v !== undefined) result.set(id, v);
+  }
+  return result;
+}
+
 export async function getPortfolioValue(address: string): Promise<number> {
   const url = `${DATA_API}/value?user=${address}`;
   const data = await getJSON<{ user: string; value: number }[]>(url);
@@ -389,9 +434,11 @@ async function getAccountUncached(handle: string): Promise<
   // e.g. an eliminated team in a still-running negative-risk event. Those
   // outcomes are final, so present them as closed.
   const openPositions = rawOpenPositions.filter((p) => !p.redeemable);
-  const resolvedAsClosed: ClosedPosition[] = rawOpenPositions
-    .filter((p) => p.redeemable)
-    .map((p) => ({
+  const redeemable = rawOpenPositions.filter((p) => p.redeemable);
+  // Real per-market resolution dates (static) instead of an ever-moving "today".
+  const resolutions = await getMarketResolutions(redeemable.map((p) => p.conditionId));
+  const nowSec = Math.floor(Date.now() / 1000);
+  const resolvedAsClosed: ClosedPosition[] = redeemable.map((p) => ({
       proxyWallet: p.proxyWallet,
       asset: p.asset,
       conditionId: p.conditionId,
@@ -406,13 +453,12 @@ async function getAccountUncached(handle: string): Promise<
       outcome: p.outcome,
       outcomeIndex: p.outcomeIndex,
       endDate: p.endDate,
-      // The API doesn't say when the market resolved; the event's endDate can
-      // even be in the future (early resolution inside a negative-risk event),
-      // so cap at now to keep these out of the future on charts.
-      timestamp: Math.min(
-        Math.floor(Date.parse(p.endDate) / 1000) || 0,
-        Math.floor(Date.now() / 1000)
-      ),
+      // The day the market actually resolved. Falls back to the endDate cap
+      // (the event endDate can be in the future for early-resolved markets in
+      // a negative-risk event) only when Gamma has no resolution time.
+      timestamp:
+        resolutions.get(p.conditionId) ??
+        Math.min(Math.floor(Date.parse(p.endDate) / 1000) || 0, nowSec),
       claimable: p.currentValue > 0,
     }));
 
