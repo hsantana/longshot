@@ -1,7 +1,7 @@
 "use client";
 
 import type { PositionPlay } from "@/lib/analytics";
-import { formatSignedUsd, formatUsd, pnlColor } from "@/lib/format";
+import { formatPercent, formatSignedUsd, formatUsd, pnlColor } from "@/lib/format";
 import Card from "@/components/Card";
 
 function PlayList({
@@ -39,9 +39,14 @@ function PlayList({
                 </span>
               </div>
               <span
-                className={`shrink-0 text-sm font-medium tabular-nums ${pnlColor(p.pnl)}`}
+                className={`w-20 shrink-0 text-right text-sm font-medium tabular-nums ${pnlColor(p.pnl)}`}
               >
                 {formatSignedUsd(p.pnl, true)}
+              </span>
+              <span
+                className={`w-16 shrink-0 text-right text-xs tabular-nums ${pnlColor(p.pnl)} opacity-70`}
+              >
+                {p.staked > 0 ? formatPercent((p.pnl / p.staked) * 100) : "—"}
               </span>
             </li>
           ))}

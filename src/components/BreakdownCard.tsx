@@ -7,8 +7,8 @@ import Card from "@/components/Card";
 import BarList from "@/components/charts/BarList";
 
 const th =
-  "whitespace-nowrap px-1.5 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-zinc-400";
-const td = "whitespace-nowrap px-1.5 py-2 text-right text-sm tabular-nums";
+  "whitespace-nowrap px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-zinc-400";
+const td = "whitespace-nowrap px-2 py-2 text-left text-sm tabular-nums";
 
 function Toggle({
   view,
@@ -83,9 +83,10 @@ export default function BreakdownCard({
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                <th className={`${th} text-left`}>{labelHeader}</th>
-                <th className={th}>Entries</th>
-                <th className={th}>Exits</th>
+                <th className={th}>{labelHeader}</th>
+                <th className={th} title="Plays entered / exits in this window">
+                  Entries / Exits
+                </th>
                 <th className={th}>PnL</th>
                 <th className={th}>Volume</th>
               </tr>
@@ -96,14 +97,15 @@ export default function BreakdownCard({
                   key={r.key}
                   className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/60"
                 >
-                  <td className="whitespace-nowrap px-1.5 py-2 text-left text-sm">
-                    <span className="text-zinc-900 dark:text-zinc-100">{r.label}</span>
+                  <td className="whitespace-nowrap px-2 py-2 text-left text-sm">
+                    <span className="block text-zinc-900 dark:text-zinc-100">{r.label}</span>
                     {r.sublabel && (
-                      <span className="ml-1.5 text-xs text-zinc-400">{r.sublabel}</span>
+                      <span className="block text-xs text-zinc-400">{r.sublabel}</span>
                     )}
                   </td>
-                  <td className={`${td} text-zinc-500 dark:text-zinc-400`}>{r.entries}</td>
-                  <td className={`${td} text-zinc-500 dark:text-zinc-400`}>{r.exits}</td>
+                  <td className={`${td} text-zinc-500 dark:text-zinc-400`}>
+                    {r.entries}/{r.exits}
+                  </td>
                   <td className={`${td} font-medium ${pnlColor(r.pnl)}`}>
                     {formatSignedUsd(r.pnl, true)}
                   </td>

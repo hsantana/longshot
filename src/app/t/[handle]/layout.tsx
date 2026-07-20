@@ -36,7 +36,7 @@ export default async function TrackerLayout({
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
+    <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-8">
       <header className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
         <Link href="/" className="shrink-0 sm:flex-1">
           <Wordmark className="h-[53px]" />

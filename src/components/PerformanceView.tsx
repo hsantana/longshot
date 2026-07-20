@@ -189,19 +189,21 @@ export default function PerformanceView({
           <CalendarHeatmap days={days} startSec={startSec} nowSec={nowSec} />
         </Card>
 
-        <BreakdownCard
-          title="Plays by probability band"
-          subtitle="Probability at entry"
-          labelHeader="Band"
-          rows={bands}
-        />
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <BreakdownCard
+            title="Plays by probability band"
+            subtitle="Probability at entry"
+            labelHeader="Band"
+            rows={bands}
+          />
 
-        <BreakdownCard
-          title="Markets"
-          subtitle="By category"
-          labelHeader="Category"
-          rows={markets}
-        />
+          <BreakdownCard
+            title="Markets"
+            subtitle="By category"
+            labelHeader="Category"
+            rows={markets}
+          />
+        </div>
 
         <TopPlays best={best} worst={worst} />
 
