@@ -160,6 +160,14 @@ function ClosedTable({ positions }: { positions: ClosedPosition[] }) {
                 {formatDate(p.timestamp)}
               </td>
               <td className={`${td} font-medium ${pnlColor(p.realizedPnl)}`}>
+                {p.partial && (
+                  <span
+                    title="Partial sale — the rest of this position was held"
+                    className="mr-2 rounded-full bg-zinc-500/10 px-2 py-0.5 text-xs font-medium text-zinc-500 dark:text-zinc-400"
+                  >
+                    partial
+                  </span>
+                )}
                 {p.claimable && (
                   <span className="mr-2 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                     claimable

@@ -56,6 +56,13 @@ export interface ClosedPosition {
   timestamp: number;
   /** Market resolved but tokens not yet redeemed; true when there's value left to claim. */
   claimable?: boolean;
+  /**
+   * A partial sale out of a position (the rest is still held or resolved
+   * separately), rather than a whole play closing. Counts toward PnL and the
+   * calendar, but is excluded from win rate so a trim isn't scored as its own
+   * win/loss.
+   */
+  partial?: boolean;
 }
 
 export interface AccountSummary {
@@ -409,6 +416,63 @@ export async function getProfitProfile(
   return data[0] ?? null;
 }
 
+const DAY_SEC = 86400;
+
+/**
+ * Turn the SELL trades on a position into closed rows — one per UTC day, so a
+ * position trimmed across several fills in one session reads as a single exit
+ * rather than a burst of noise.
+ *
+ * `/closed-positions` only returns *fully* closed positions, so without this a
+ * partial sale's banked profit stays invisible: it sits in the open position's
+ * `realizedPnl` and is never rendered anywhere.
+ */
+function partialCloseRows(p: OpenPosition, sells: Trade[]): ClosedPosition[] {
+  if (sells.length === 0 || Math.abs(p.realizedPnl) < 1e-9) return [];
+
+  // Cost basis per share, derived from the remaining position (more precise
+  // than the rounded avgPrice the API reports).
+  const costPerShare = p.size > 0 ? p.initialValue / p.size : p.avgPrice;
+
+  const byDay = new Map<number, { shares: number; proceeds: number; ts: number }>();
+  for (const t of sells) {
+    const day = Math.floor(t.timestamp / DAY_SEC) * DAY_SEC;
+    const e = byDay.get(day) ?? { shares: 0, proceeds: 0, ts: t.timestamp };
+    e.shares += t.size;
+    e.proceeds += t.usdcSize;
+    e.ts = Math.max(e.ts, t.timestamp);
+    byDay.set(day, e);
+  }
+
+  const rows: ClosedPosition[] = [...byDay.values()].map((e) => ({
+    proxyWallet: p.proxyWallet,
+    asset: p.asset,
+    conditionId: p.conditionId,
+    avgPrice: p.avgPrice,
+    totalBought: e.shares,
+    realizedPnl: e.proceeds - e.shares * costPerShare,
+    curPrice: p.curPrice,
+    title: p.title,
+    slug: p.slug,
+    icon: p.icon,
+    eventSlug: p.eventSlug,
+    outcome: p.outcome,
+    outcomeIndex: p.outcomeIndex,
+    endDate: p.endDate,
+    timestamp: e.ts,
+    partial: true,
+  }));
+
+  // Scale to the API's authoritative realizedPnl so our per-day split can't
+  // drift from the reported total (keeps day-to-day proportions intact).
+  const computed = rows.reduce((s, r) => s + r.realizedPnl, 0);
+  if (Math.abs(computed) > 1e-9) {
+    const scale = p.realizedPnl / computed;
+    for (const r of rows) r.realizedPnl *= scale;
+  }
+  return rows;
+}
+
 async function getAccountUncached(handle: string): Promise<
   | {
       summary: AccountSummary;
@@ -421,13 +485,23 @@ async function getAccountUncached(handle: string): Promise<
   if (!resolved) return null;
   const { address } = resolved;
 
-  const [rawOpenPositions, rawClosedPositions, portfolioValue, profit] =
+  const [rawOpenPositions, rawClosedPositions, portfolioValue, profit, trades] =
     await Promise.all([
       getOpenPositions(address),
       getClosedPositions(address),
       getPortfolioValue(address),
       getProfitProfile(address),
+      // Shared with the Performance tab via the request-level cache.
+      cachedGetTrades(address),
     ]);
+
+  const sellsByAsset = new Map<string, Trade[]>();
+  for (const t of trades) {
+    if (t.side !== "SELL") continue;
+    const arr = sellsByAsset.get(t.asset);
+    if (arr) arr.push(t);
+    else sellsByAsset.set(t.asset, [t]);
+  }
 
   // The Data API keeps a position in /positions until its tokens are sold or
   // redeemed — including markets that already resolved (redeemable: true),
@@ -444,7 +518,10 @@ async function getAccountUncached(handle: string): Promise<
       conditionId: p.conditionId,
       avgPrice: p.avgPrice,
       totalBought: p.totalBought,
-      realizedPnl: p.realizedPnl + p.cashPnl,
+      // Only the outcome on the shares still held at resolution. Anything sold
+      // earlier is emitted separately by partialCloseRows, on its own sale
+      // date, so the two can't double-count.
+      realizedPnl: p.cashPnl,
       curPrice: p.curPrice,
       title: p.title,
       slug: p.slug,
@@ -462,9 +539,17 @@ async function getAccountUncached(handle: string): Promise<
       claimable: p.currentValue > 0,
     }));
 
-  const closedPositions = [...resolvedAsClosed, ...rawClosedPositions].sort(
-    (a, b) => b.timestamp - a.timestamp
+  // Partial sales out of positions that are still held (or that resolved
+  // separately above) — otherwise this banked profit is invisible.
+  const partialCloses = rawOpenPositions.flatMap((p) =>
+    partialCloseRows(p, sellsByAsset.get(p.asset) ?? [])
   );
+
+  const closedPositions = [
+    ...resolvedAsClosed,
+    ...partialCloses,
+    ...rawClosedPositions,
+  ].sort((a, b) => b.timestamp - a.timestamp);
 
   const unrealizedPnl = openPositions.reduce((sum, p) => sum + p.cashPnl, 0);
 

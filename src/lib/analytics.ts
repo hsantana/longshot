@@ -21,6 +21,12 @@ export interface Play {
   ts: number;
   category: string;
   status: "open" | "closed";
+  /**
+   * A partial sale out of a position rather than a whole play closing. Counts
+   * toward PnL and the calendar, but excluded from win rate — a trim isn't its
+   * own win/loss; the position is scored once, as a whole play.
+   */
+  partial?: boolean;
 }
 
 /** Slimmed trade passed to the client (full Trade objects are heavy at 3k rows). */
@@ -92,6 +98,7 @@ export function toPlays(
       ts: p.timestamp,
       category: categories.get(p.eventSlug) ?? "Other",
       status: "closed" as const,
+      partial: p.partial,
     };
   });
 }
@@ -336,7 +343,9 @@ function weeklyBuckets(allPlays: Play[]): Map<number, Play[]> {
 }
 
 export function winRate(allPlays: Play[]): number | null {
-  const plays = allPlays.filter((p) => p.status === "closed");
+  // Partial sales are excluded: trimming a position isn't a separate win/loss,
+  // the position is scored once as a whole play when it fully closes.
+  const plays = allPlays.filter((p) => p.status === "closed" && !p.partial);
   if (plays.length === 0) return null;
   return plays.filter((p) => p.pnl > 0).length / plays.length;
 }
