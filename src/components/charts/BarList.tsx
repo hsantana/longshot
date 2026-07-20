@@ -1,11 +1,16 @@
 "use client";
 
 interface Item {
+  /** Falls back to label; set when labels can repeat. */
+  key?: string;
   label: string;
   sublabel?: string;
   value: number;
   display: string;
   extra?: string;
+  /** Colour the bar independently of its magnitude (e.g. size by allocation,
+   *  colour by whether the position is up or down). */
+  tone?: "positive" | "negative" | "neutral";
 }
 
 interface Props {
@@ -35,14 +40,15 @@ export default function BarList({ items, mode = "magnitude", columns }: Props) {
       )}
       {items.map((item) => {
         const frac = Math.abs(item.value) / max;
+        const sign = item.tone ?? (mode === "diverging" ? (item.value >= 0 ? "positive" : "negative") : "neutral");
         const color =
-          mode === "diverging"
-            ? item.value >= 0
-              ? "bg-emerald-500 dark:bg-emerald-500"
-              : "bg-rose-500 dark:bg-rose-500"
-            : "bg-emerald-600 dark:bg-emerald-500";
+          sign === "positive"
+            ? "bg-emerald-500 dark:bg-emerald-500"
+            : sign === "negative"
+              ? "bg-rose-500 dark:bg-rose-500"
+              : "bg-emerald-600 dark:bg-emerald-500";
         return (
-          <li key={item.label} className="flex items-center gap-3 text-sm">
+          <li key={item.key ?? item.label} className="flex items-center gap-3 text-sm">
             <span className="w-28 shrink-0 truncate text-zinc-600 dark:text-zinc-300" title={item.label}>
               {item.label}
               {item.sublabel && (

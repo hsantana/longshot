@@ -8,6 +8,14 @@ import { formatSignedUsd, formatUsd, pnlColor } from "@/lib/format";
 import PositionTables from "@/components/PositionTables";
 import Card from "@/components/Card";
 import NetWorthChart from "@/components/charts/NetWorthChart";
+import DonutChart from "@/components/charts/DonutChart";
+import BarList from "@/components/charts/BarList";
+import {
+  allocationByPosition,
+  cashVsDeployed,
+  exposureByBand,
+  resolutionLadder,
+} from "@/lib/portfolio";
 import PortfolioFilterBar, {
   DEFAULT_PORTFOLIO_FILTERS,
   type PortfolioFilters,
@@ -121,6 +129,18 @@ export default function PortfolioView({
     [closedPositions, filters, categories]
   );
 
+  // Composition/risk charts describe the live book, so they follow the same
+  // filters as the positions table.
+  const composition = useMemo(
+    () => (cash === null ? null : cashVsDeployed(cash, filteredOpen)),
+    [cash, filteredOpen]
+  );
+  const allocation = useMemo(() => allocationByPosition(filteredOpen), [filteredOpen]);
+  const ladder = useMemo(() => resolutionLadder(filteredOpen, nowMs), [filteredOpen, nowMs]);
+  const bandExposure = useMemo(() => exposureByBand(filteredOpen), [filteredOpen]);
+
+  const money = (v: number) => formatUsd(v, true);
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_230px] lg:items-start">
       <div className="order-2 space-y-6 lg:order-1">
@@ -163,6 +183,58 @@ export default function PortfolioView({
             </p>
           )}
         </Card>
+
+        {/* Where is my money? */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+          <Card title="Cash vs in play" subtitle="How much capital is deployed">
+            {composition ? (
+              <DonutChart slices={composition} formatValue={money} />
+            ) : (
+              <p className="flex items-center justify-center py-12 text-sm text-zinc-400">
+                Cash balance unavailable.
+              </p>
+            )}
+          </Card>
+
+          <Card title="Allocation" subtitle="Largest positions — green is up, red is down">
+            <BarList
+              items={allocation.map((s) => ({
+                key: s.key,
+                label: s.label,
+                sublabel: s.sublabel,
+                value: s.value,
+                display: money(s.value),
+                tone: s.tone,
+              }))}
+            />
+          </Card>
+        </div>
+
+        {/* What risk am I carrying? */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <Card title="Time to resolution" subtitle="When this capital frees up">
+            <BarList
+              items={ladder.map((s) => ({
+                key: s.key,
+                label: s.label,
+                value: s.value,
+                display: money(s.value),
+              }))}
+            />
+          </Card>
+
+          <Card title="Exposure by probability band" subtitle="Probability at entry">
+            <BarList
+              items={bandExposure.map((s) => ({
+                key: s.key,
+                label: s.label,
+                sublabel: s.sublabel,
+                value: s.value,
+                display: money(s.value),
+              }))}
+            />
+          </Card>
+        </div>
 
         <PositionTables
           openPositions={filteredOpen}
