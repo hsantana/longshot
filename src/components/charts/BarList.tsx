@@ -11,6 +11,10 @@ interface Item {
   /** Colour the bar independently of its magnitude (e.g. size by allocation,
    *  colour by whether the position is up or down). */
   tone?: "positive" | "negative" | "neutral";
+  /** Draws a reference marker on the bar (bullet-chart style), e.g. cost basis
+   *  against current value. */
+  reference?: number;
+  referenceLabel?: string;
 }
 
 interface Props {
@@ -55,11 +59,21 @@ export default function BarList({ items, mode = "magnitude", columns }: Props) {
                 <span className="block text-[11px] text-zinc-400">{item.sublabel}</span>
               )}
             </span>
-            <span className="relative h-4 flex-1 overflow-hidden rounded-sm bg-zinc-100 dark:bg-zinc-800">
+            <span className="relative h-4 min-w-[56px] flex-1 overflow-hidden rounded-sm bg-zinc-100 dark:bg-zinc-800">
               <span
                 className={`absolute inset-y-0 left-0 rounded-sm ${color}`}
                 style={{ width: `${Math.max(frac * 100, item.value !== 0 ? 1 : 0)}%` }}
               />
+              {item.reference !== undefined && item.reference > 0 && (
+                <span
+                  aria-hidden="true"
+                  title={item.referenceLabel}
+                  className="absolute inset-y-0 w-0.5 bg-zinc-500 dark:bg-zinc-300"
+                  style={{
+                    left: `${Math.min((Math.abs(item.reference) / max) * 100, 100)}%`,
+                  }}
+                />
+              )}
             </span>
             <span className="w-20 shrink-0 text-right font-medium tabular-nums">
               {item.display}

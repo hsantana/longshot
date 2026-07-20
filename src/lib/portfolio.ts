@@ -12,6 +12,39 @@ export interface Slice {
   value: number;
   /** Signals whether the underlying position is up or down. */
   tone?: "positive" | "negative" | "neutral";
+  /** Reference value drawn as a marker on the bar, e.g. cost basis. */
+  reference?: number;
+}
+
+export interface RiskReward {
+  /** Current value of the book — what's forfeited if it all goes to zero. */
+  atRisk: number;
+  /** Net upside if every open position resolves in your favour. */
+  toWin: number;
+  /** toWin / atRisk. Null when nothing is at risk. */
+  multiple: number | null;
+}
+
+/**
+ * "X at risk to win Y" across open positions.
+ *
+ * Every share settles at $1, so a position's gross payout is simply its share
+ * count. Upside is reported net of what the position is worth today — quoting
+ * the gross figure would badly flatter near-locks (a 95c position would read
+ * "win $100" when the real upside is $5).
+ */
+export function riskReward(openPositions: OpenPosition[]): RiskReward {
+  let atRisk = 0;
+  let toWin = 0;
+  for (const p of openPositions) {
+    atRisk += p.currentValue;
+    toWin += p.size - p.currentValue;
+  }
+  return {
+    atRisk,
+    toWin,
+    multiple: atRisk > 0 ? (atRisk + toWin) / atRisk : null,
+  };
 }
 
 /** Capital split between cash and money deployed into positions. */
@@ -45,6 +78,9 @@ export function allocationByPosition(
     sublabel: p.outcome,
     value: p.currentValue,
     tone: p.cashPnl >= 0 ? "positive" : "negative",
+    // Cost basis, drawn as a marker so each bar shows what was paid against
+    // what it's worth now.
+    reference: p.initialValue,
   }));
 
   const rest = sorted.slice(top);
@@ -54,6 +90,7 @@ export function allocationByPosition(
       label: `Other (${rest.length})`,
       value: rest.reduce((s, p) => s + p.currentValue, 0),
       tone: "neutral",
+      reference: rest.reduce((s, p) => s + p.initialValue, 0),
     });
   }
   return head;
