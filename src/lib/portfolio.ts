@@ -97,17 +97,26 @@ export function allocationByPosition(
 }
 
 const HOUR_MS = 3600 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+// Ordered thresholds — a position lands in the first bucket its remaining time
+// falls under. "Past due" catches markets whose end date has passed but which
+// haven't resolved yet; without it they'd be misreported as resolving today.
 const LADDER = [
-  { key: "24h", label: "Next 24h", maxMs: 24 * HOUR_MS },
-  { key: "week", label: "This week", maxMs: 7 * 24 * HOUR_MS },
-  { key: "month", label: "This month", maxMs: 30 * 24 * HOUR_MS },
-  { key: "later", label: "Later", maxMs: Infinity },
+  { key: "overdue", label: "Past due", maxMs: 0 },
+  { key: "24h", label: "Next 24h", maxMs: DAY_MS },
+  { key: "week", label: "This week", maxMs: 7 * DAY_MS },
+  { key: "month", label: "This month", maxMs: 30 * DAY_MS },
+  { key: "q", label: "1–3 months", maxMs: 90 * DAY_MS },
+  { key: "h1", label: "3–6 months", maxMs: 180 * DAY_MS },
+  { key: "y1", label: "6–12 months", maxMs: 365 * DAY_MS },
+  { key: "beyond", label: "Over a year", maxMs: Infinity },
 ] as const;
 
 /**
  * Capital by when it frees up — the prediction-market equivalent of a bond
- * maturity ladder. Positions already past their end date but not yet resolved
- * fall in the nearest bucket.
+ * maturity ladder. The "Past due" bucket is dropped when empty, since it's an
+ * exception state rather than part of the ladder.
  */
 export function resolutionLadder(
   openPositions: OpenPosition[],
@@ -120,11 +129,13 @@ export function resolutionLadder(
     const bucket = LADDER.find((b) => ms < b.maxMs) ?? LADDER[LADDER.length - 1];
     totals.set(bucket.key, (totals.get(bucket.key) ?? 0) + p.currentValue);
   }
-  return LADDER.map((b) => ({
-    key: b.key,
-    label: b.label,
-    value: totals.get(b.key) ?? 0,
-  }));
+  return LADDER.filter((b) => b.key !== "overdue" || (totals.get(b.key) ?? 0) > 0).map(
+    (b) => ({
+      key: b.key,
+      label: b.label,
+      value: totals.get(b.key) ?? 0,
+    })
+  );
 }
 
 /** Capital by probability band at entry — how speculative the live book is. */
