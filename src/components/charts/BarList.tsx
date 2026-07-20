@@ -5,6 +5,8 @@ interface Item {
   key?: string;
   label: string;
   sublabel?: string;
+  /** Optional leading icon (e.g. a market's image), matching the table view. */
+  icon?: string;
   value: number;
   display: string;
   extra?: string;
@@ -34,7 +36,7 @@ export default function BarList({ items, mode = "magnitude", columns }: Props) {
     <ul className="space-y-2.5">
       {columns && (
         <li className="flex items-center gap-3 text-[11px] font-medium uppercase tracking-wide text-zinc-400">
-          <span className="w-28 shrink-0" />
+          <span className="w-40 shrink-0" />
           <span className="flex-1" />
           <span className="w-20 shrink-0 text-right">{columns.value}</span>
           {columns.extra !== undefined && (
@@ -53,11 +55,17 @@ export default function BarList({ items, mode = "magnitude", columns }: Props) {
               : "bg-emerald-600 dark:bg-emerald-500";
         return (
           <li key={item.key ?? item.label} className="flex items-center gap-3 text-sm">
-            <span className="w-28 shrink-0 truncate text-zinc-600 dark:text-zinc-300" title={item.label}>
-              {item.label}
-              {item.sublabel && (
-                <span className="block text-[11px] text-zinc-400">{item.sublabel}</span>
+            <span className="flex w-40 shrink-0 items-center gap-2" title={item.label}>
+              {item.icon && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.icon} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />
               )}
+              <span className="min-w-0 truncate text-zinc-600 dark:text-zinc-300">
+                {item.label}
+                {item.sublabel && (
+                  <span className="block text-[11px] text-zinc-400">{item.sublabel}</span>
+                )}
+              </span>
             </span>
             <span className="relative h-4 min-w-[56px] flex-1 overflow-hidden rounded-sm bg-zinc-100 dark:bg-zinc-800">
               <span

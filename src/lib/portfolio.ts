@@ -16,6 +16,8 @@ export interface Slice {
   reference?: number;
   /** Compact label for axis use, where the full label is too long. */
   shortLabel?: string;
+  /** Optional leading icon. */
+  icon?: string;
 }
 
 export interface RiskReward {
@@ -79,6 +81,7 @@ export function allocationByPosition(
     label: p.title,
     sublabel: p.outcome,
     value: p.currentValue,
+    icon: p.icon,
     tone: p.cashPnl >= 0 ? "positive" : "negative",
     // Cost basis, drawn as a marker so each bar shows what was paid against
     // what it's worth now.

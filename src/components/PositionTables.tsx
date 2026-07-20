@@ -235,6 +235,7 @@ export default function PositionTables({
                 key: a.key,
                 label: a.label,
                 sublabel: a.sublabel,
+                icon: a.icon,
                 value: a.value,
                 display: formatUsd(a.value, true),
                 tone: a.tone,
