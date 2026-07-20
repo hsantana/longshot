@@ -9,10 +9,10 @@ import PositionTables from "@/components/PositionTables";
 import Card from "@/components/Card";
 import NetWorthChart from "@/components/charts/NetWorthChart";
 import DonutChart from "@/components/charts/DonutChart";
+import AllocationCard from "@/components/AllocationCard";
 import BarList from "@/components/charts/BarList";
 import ColumnChart from "@/components/charts/ColumnChart";
 import {
-  allocationByPosition,
   cashVsDeployed,
   exposureByBand,
   resolutionLadder,
@@ -137,7 +137,6 @@ export default function PortfolioView({
     () => (cash === null ? null : cashVsDeployed(cash, filteredOpen)),
     [cash, filteredOpen]
   );
-  const allocation = useMemo(() => allocationByPosition(filteredOpen), [filteredOpen]);
   const ladder = useMemo(() => resolutionLadder(filteredOpen, nowMs), [filteredOpen, nowMs]);
   const bandExposure = useMemo(() => exposureByBand(filteredOpen), [filteredOpen]);
   const risk = useMemo(() => riskReward(filteredOpen), [filteredOpen]);
@@ -173,22 +172,44 @@ export default function PortfolioView({
           />
         </section>
 
-        <Card title="Net worth" subtitle="Cash + portfolio value over time">
-          {netWorth ? (
-            <NetWorthChart
-              cash={chartCash}
-              value={chartValue}
-              formatValue={(v) => formatUsd(v, true)}
-            />
-          ) : (
-            <p className="flex items-center justify-center py-12 text-sm text-zinc-400">
-              Not available right now.
-            </p>
-          )}
-        </Card>
-
         {/* Where is my money? */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-[minmax(0,260px)_minmax(0,260px)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+          <Card title="Net worth" subtitle="Cash + portfolio value over time">
+            {netWorth ? (
+              <NetWorthChart
+                cash={chartCash}
+                value={chartValue}
+                formatValue={money}
+              />
+            ) : (
+              <p className="flex items-center justify-center py-12 text-sm text-zinc-400">
+                Not available right now.
+              </p>
+            )}
+            {risk.atRisk > 0 && (
+              <p className="mt-3 border-t border-zinc-200 pt-3 text-xs text-zinc-400 dark:border-zinc-800">
+                <span className="font-medium tabular-nums text-zinc-600 dark:text-zinc-300">
+                  {money(risk.atRisk)}
+                </span>{" "}
+                at risk to win{" "}
+                <span className="font-medium tabular-nums text-emerald-500">
+                  {money(risk.toWin)}
+                </span>
+                {risk.multiple !== null && (
+                  <>
+                    {" · "}
+                    <span className="font-medium tabular-nums text-zinc-600 dark:text-zinc-300">
+                      {risk.multiple < 10
+                        ? `${risk.multiple.toFixed(1)}x`
+                        : `${Math.round(risk.multiple)}x`}
+                    </span>{" "}
+                    on what&apos;s at stake
+                  </>
+                )}
+              </p>
+            )}
+          </Card>
+
           <Card title="Cash vs in play" subtitle="How much capital is deployed">
             {composition ? (
               <DonutChart slices={composition} formatValue={money} />
@@ -198,48 +219,9 @@ export default function PortfolioView({
               </p>
             )}
           </Card>
-
-          <Card title="At risk" subtitle="If every open position resolved your way">
-            {risk.atRisk > 0 ? (
-              <div className="flex h-full flex-col justify-center gap-1 py-2">
-                <p className="text-2xl font-semibold tabular-nums">{money(risk.atRisk)}</p>
-                <p className="text-xs text-zinc-400">at risk to win</p>
-                <p className="text-2xl font-semibold tabular-nums text-emerald-500">
-                  {money(risk.toWin)}
-                </p>
-                {risk.multiple !== null && (
-                  <p className="mt-2 text-xs text-zinc-400">
-                    <span className="font-medium text-zinc-600 dark:text-zinc-300">
-                      {risk.multiple < 10
-                        ? `${risk.multiple.toFixed(1)}x`
-                        : `${Math.round(risk.multiple)}x`}
-                    </span>{" "}
-                    on what&apos;s at stake
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="flex items-center justify-center py-12 text-sm text-zinc-400">
-                Nothing at risk.
-              </p>
-            )}
-          </Card>
-
-          <Card title="Allocation" subtitle="Value now, with a marker at what was paid" className="xl:col-span-2 2xl:col-span-1">
-            <BarList
-              items={allocation.map((s) => ({
-                key: s.key,
-                label: s.label,
-                sublabel: s.sublabel,
-                value: s.value,
-                display: money(s.value),
-                tone: s.tone,
-                reference: s.reference,
-                referenceLabel: s.reference ? `Paid ${money(s.reference)}` : undefined,
-              }))}
-            />
-          </Card>
         </div>
+
+        <AllocationCard positions={filteredOpen} />
 
         {/* What risk am I carrying? */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
