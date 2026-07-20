@@ -196,7 +196,7 @@ export default function PortfolioView({
             )}
           </Card>
 
-          <Card title="Allocation" subtitle="Largest positions — green is up, red is down">
+          <Card title="Allocation" subtitle="Largest positions by value">
             <BarList
               items={allocation.map((s) => ({
                 key: s.key,
