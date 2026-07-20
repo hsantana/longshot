@@ -212,6 +212,31 @@ export function cumulativePnlSeries(
   return points;
 }
 
+/** Running traded volume over the window, one point per day. */
+export function cumulativeVolumeSeries(
+  trades: TradeLite[],
+  startSec: number,
+  nowSec: number
+): TrendPoint[] {
+  if (trades.length === 0) return [];
+  const byDay = new Map<number, number>();
+  for (const t of trades) {
+    const day = Math.floor(t.ts / 86400) * 86400;
+    byDay.set(day, (byDay.get(day) ?? 0) + t.usd);
+  }
+  const firstDay = Math.min(...byDay.keys());
+  const startDay = Math.floor(Math.max(startSec, 1) / 86400) * 86400;
+  const from = startSec > 0 ? Math.min(startDay, firstDay) : firstDay;
+  const to = Math.floor(nowSec / 86400) * 86400;
+  const points: TrendPoint[] = [];
+  let cum = 0;
+  for (let d = from; d <= to; d += 86400) {
+    cum += byDay.get(d) ?? 0;
+    points.push({ ts: d, value: cum });
+  }
+  return points;
+}
+
 export interface DayCell {
   /** ISO date (UTC) */
   date: string;

@@ -8,6 +8,7 @@ import {
   calendarDays,
   categoryBreakdown,
   cumulativePnlSeries,
+  cumulativeVolumeSeries,
   filterPlays,
   filterPositionPlays,
   filterTrades,
@@ -30,6 +31,24 @@ import BreakdownCard from "@/components/BreakdownCard";
 import TopPlays from "@/components/TopPlays";
 import type { TrendPoint } from "@/lib/analytics";
 
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex shrink-0">
+      <span
+        tabIndex={0}
+        role="button"
+        aria-label={text}
+        className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-zinc-300 text-[10px] leading-none text-zinc-400 transition hover:border-zinc-400 hover:text-zinc-600 dark:border-zinc-600 dark:hover:border-zinc-500 dark:hover:text-zinc-300"
+      >
+        ?
+      </span>
+      <span className="pointer-events-none absolute left-1/2 top-6 z-20 w-52 -translate-x-1/2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-normal normal-case tracking-normal text-zinc-600 opacity-0 shadow-md transition group-focus-within:opacity-100 group-hover:opacity-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 function TrendTile({
   label,
   hint,
@@ -46,28 +65,20 @@ function TrendTile({
   formatValue: (v: number) => string;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="whitespace-nowrap text-xs font-medium uppercase tracking-wide text-zinc-400">
-            {label}
-          </p>
-          <p
-            className={`mt-1.5 whitespace-nowrap text-2xl font-semibold tabular-nums ${valueClass}`}
-          >
-            {value}
-          </p>
-          <p className="mt-0.5 text-xs text-zinc-400">{hint}</p>
-        </div>
-        <div className="w-20 shrink-0">
-          <LineChart
-            data={trend}
-            variant="spark"
-            height={32}
-            area
-            formatValue={formatValue}
-          />
-        </div>
+    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex items-center gap-1.5">
+        <p className="whitespace-nowrap text-xs font-medium uppercase tracking-wide text-zinc-400">
+          {label}
+        </p>
+        <InfoTip text={hint} />
+      </div>
+      <p
+        className={`mt-1.5 whitespace-nowrap text-2xl font-semibold tabular-nums ${valueClass}`}
+      >
+        {value}
+      </p>
+      <div className="mt-2">
+        <LineChart data={trend} variant="spark" height={34} area formatValue={formatValue} />
       </div>
     </div>
   );
@@ -105,6 +116,14 @@ export default function PerformanceView({
     [fPlays, startSec, nowSec]
   );
   const days = useMemo(() => calendarDays(fPlays, fTrades), [fPlays, fTrades]);
+  const volumeSeries = useMemo(
+    () => cumulativeVolumeSeries(fTrades, startSec, nowSec),
+    [fTrades, startSec, nowSec]
+  );
+  const totalVolume = useMemo(
+    () => fTrades.reduce((s, t) => s + t.usd, 0),
+    [fTrades]
+  );
 
   // Plays are entry-anchored and counted once per position, so bands, markets
   // and return-per-$1 read from them rather than from the dated cash events.
@@ -138,15 +157,15 @@ export default function PerformanceView({
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_230px] lg:items-start">
       <div className="order-2 space-y-4 lg:order-1">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <TrendTile
             label="PnL"
             hint={
               filters.status === "open"
-                ? "Unrealized, open positions"
+                ? "Unrealized mark-to-market on open positions."
                 : filters.status === "closed"
-                  ? "Realized, closed plays"
-                  : "Realized + unrealized"
+                  ? "Realized on plays closed in this window."
+                  : "Realized in this window plus unrealized on open positions."
             }
             value={formatSignedUsd(totalPnl, true)}
             valueClass={pnlColor(totalPnl)}
@@ -155,18 +174,25 @@ export default function PerformanceView({
           />
           <TrendTile
             label="Win rate"
-            hint="Winning exits ÷ total exits"
+            hint="Share of exits that were profitable. Counted per exit — each sale and each resolution — not per play."
             value={wr === null ? "—" : `${(wr * 100).toFixed(1)}%`}
             trend={wrTrend}
             formatValue={(v) => `${v.toFixed(0)}%`}
           />
           <TrendTile
             label="Return per $1"
-            hint="Total returned ÷ total staked"
+            hint="Dollars back per dollar staked, across whole positions, including the current value of anything still held."
             value={rr === null ? "—" : `$${rr.toFixed(2)}`}
             valueClass={rr !== null && rr < 1 ? "text-rose-500" : ""}
             trend={rrTrend}
             formatValue={(v) => `$${v.toFixed(2)}`}
+          />
+          <TrendTile
+            label="Volume"
+            hint="Total traded in this window — buys and sells added together."
+            value={formatUsd(totalVolume, true)}
+            trend={volumeSeries}
+            formatValue={(v) => formatUsd(v, true)}
           />
         </div>
 
