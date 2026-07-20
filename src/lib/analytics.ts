@@ -279,6 +279,8 @@ export interface PositionPlay {
   entryPrice: number;
   /** First BUY (unix seconds) — what the date filter matches on. */
   entryTs: number;
+  /** Last exit (unix seconds); 0 while still held. */
+  exitTs: number;
   staked: number;
   /** Realized across every exit, plus unrealized on anything still held. */
   pnl: number;
@@ -345,6 +347,7 @@ export function toPositionPlays(
       category: categories.get(ref.eventSlug) ?? "Other",
       entryPrice: ref.avgPrice,
       entryTs,
+      exitTs: o || rows.length === 0 ? 0 : Math.max(...rows.map((r) => r.timestamp)),
       staked,
       pnl,
       returned: staked + pnl,
@@ -371,50 +374,101 @@ export function filterPositionPlays(
   );
 }
 
-export interface BandStat {
-  key: BandKey;
-  label: string;
-  range: string;
-  count: number;
-  pnl: number;
+/**
+ * Best and worst fully-closed plays by PnL, ranked over positions that
+ * *closed* in the window (so a position entered long ago but exited now
+ * counts, same basis as the PnL KPI).
+ */
+export function bestAndWorstPlays(
+  plays: PositionPlay[],
+  filters: Filters,
+  nowSec: number,
+  n = 5
+): { best: PositionPlay[]; worst: PositionPlay[] } {
+  const start = windowStart(filters.dateKey, nowSec);
+  const closed = plays.filter(
+    (p) =>
+      p.status === "closed" &&
+      p.exitTs >= start &&
+      (filters.category === "all" || p.category === filters.category) &&
+      (filters.bands.length === 0 || filters.bands.includes(bandOf(p.entryPrice))) &&
+      sideMatches(filters.side, p.outcome)
+  );
+  const sorted = [...closed].sort((a, b) => b.pnl - a.pnl);
+  return {
+    best: sorted.filter((p) => p.pnl > 0).slice(0, n),
+    worst: sorted
+      .filter((p) => p.pnl < 0)
+      .slice(-n)
+      .reverse(),
+  };
 }
 
-export function bandDistribution(plays: PositionPlay[]): BandStat[] {
+export interface BreakdownRow {
+  key: string;
+  label: string;
+  /** Secondary label, e.g. a band's percentage range. */
+  sublabel?: string;
+  /** Plays entered in the window. */
+  entries: number;
+  /** Exits (sales + resolutions) in the window. */
+  exits: number;
+  /** Money that moved in the window, plus unrealized — matches the PnL KPI. */
+  pnl: number;
+  volume: number;
+}
+
+/**
+ * Breakdown by probability band at entry. Entries are entry-anchored plays;
+ * exits, PnL and volume are event-based, so this reconciles with the PnL KPI.
+ */
+export function bandBreakdown(
+  entered: PositionPlay[],
+  events: Play[],
+  trades: TradeLite[]
+): BreakdownRow[] {
   return BANDS.map((b) => {
-    const inBand = plays.filter((p) => bandOf(p.entryPrice) === b.key);
+    const inBand = (price: number) => bandOf(price) === b.key;
     return {
       key: b.key,
       label: b.label,
-      range: b.range,
-      count: inBand.length,
-      pnl: inBand.reduce((s, p) => s + p.pnl, 0),
+      sublabel: b.range,
+      entries: entered.filter((p) => inBand(p.entryPrice)).length,
+      exits: events.filter((p) => p.status === "closed" && inBand(p.entryPrice)).length,
+      pnl: events
+        .filter((p) => inBand(p.entryPrice))
+        .reduce((s, p) => s + p.pnl, 0),
+      volume: trades.filter((t) => inBand(t.price)).reduce((s, t) => s + t.usd, 0),
     };
   });
 }
 
 /**
- * PnL and traded volume per market category, both on an event basis — money
- * that moved in the window, so selling out of a position entered months ago
- * still counts here. This is what makes the card agree with the PnL KPI.
+ * Breakdown by market category. Same basis as bandBreakdown: entries are
+ * entry-anchored, everything else is event-based.
  */
 export function categoryBreakdown(
-  plays: { category: string; pnl: number }[],
+  entered: PositionPlay[],
+  events: Play[],
   trades: TradeLite[]
-): { label: string; pnl: number; volume: number }[] {
-  const map = new Map<string, { pnl: number; volume: number }>();
+): BreakdownRow[] {
+  const map = new Map<string, BreakdownRow>();
   const get = (label: string) => {
     let e = map.get(label);
     if (!e) {
-      e = { pnl: 0, volume: 0 };
+      e = { key: label, label, entries: 0, exits: 0, pnl: 0, volume: 0 };
       map.set(label, e);
     }
     return e;
   };
-  for (const p of plays) get(p.category).pnl += p.pnl;
+  for (const p of entered) get(p.category).entries += 1;
+  for (const p of events) {
+    const row = get(p.category);
+    row.pnl += p.pnl;
+    if (p.status === "closed") row.exits += 1;
+  }
   for (const t of trades) get(t.category).volume += t.usd;
-  return [...map.entries()]
-    .map(([label, e]) => ({ label, ...e }))
-    .sort((a, b) => b.pnl - a.pnl);
+  return [...map.values()].sort((a, b) => b.pnl - a.pnl);
 }
 
 // ---------- Style ----------

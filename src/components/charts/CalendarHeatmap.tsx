@@ -236,30 +236,39 @@ export default function CalendarHeatmap({ days, startSec, nowSec }: Props) {
           className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs shadow-md dark:border-zinc-700 dark:bg-zinc-800"
           style={{ left: hover.clientX, top: hover.clientY - 10 }}
         >
-          <p className="font-medium">{hover.date}</p>
+          <p className="flex items-center gap-2 font-medium">
+            <span>{hover.date}</span>
+            {hover.cell && (hover.cell.wins > 0 || hover.cell.losses > 0) && (
+              <span className={hover.cell.net >= 0 ? "text-emerald-500" : "text-rose-500"}>
+                net {formatSignedUsd(hover.cell.net)}
+              </span>
+            )}
+          </p>
           {hover.cell ? (
-            <p className="text-zinc-500 dark:text-zinc-400">
-              {hover.cell.wins > 0 && (
-                <>
-                  {hover.cell.wins} win{hover.cell.wins > 1 ? "s" : ""} (
-                  {formatSignedUsd(hover.cell.winsPnl)}){", "}
-                </>
-              )}
-              {hover.cell.losses > 0 && (
-                <>
-                  {hover.cell.losses} loss{hover.cell.losses > 1 ? "es" : ""} (
-                  {formatSignedUsd(hover.cell.lossesPnl)}){", "}
-                </>
-              )}
-              {(hover.cell.wins > 0 || hover.cell.losses > 0) && (
-                <>net {formatSignedUsd(hover.cell.net)}{"; "}</>
-              )}
-              {hover.cell.opened > 0
-                ? `${hover.cell.opened} buy${hover.cell.opened > 1 ? "s" : ""}`
-                : "nothing opened"}
-            </p>
+            <div className="mt-1 space-y-0.5 text-zinc-500 dark:text-zinc-400">
+              <p className="flex items-center gap-1.5">
+                <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" className="shrink-0 fill-emerald-500">
+                  <path d="M8 1.5l2 4.2 4.5.6-3.3 3.2.8 4.5L8 11.8 4 14l.8-4.5L1.5 6.3l4.5-.6z" />
+                </svg>
+                {hover.cell.wins} win{hover.cell.wins === 1 ? "" : "s"}
+                {hover.cell.wins > 0 && ` (${formatSignedUsd(hover.cell.winsPnl)})`}
+              </p>
+              <p className="flex items-center gap-1.5">
+                <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" className="shrink-0 fill-rose-500">
+                  <path d="M8 14.5l-2-4.2-4.5-.6 3.3-3.2L4 2l4 2.2L12 2l-.8 4.5 3.3 3.2-4.5.6z" />
+                </svg>
+                {hover.cell.losses} loss{hover.cell.losses === 1 ? "" : "es"}
+                {hover.cell.losses > 0 && ` (${formatSignedUsd(hover.cell.lossesPnl)})`}
+              </p>
+              <p className="flex items-center gap-1.5">
+                <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" className="shrink-0 fill-zinc-400">
+                  <circle cx="8" cy="8" r="5" />
+                </svg>
+                {hover.cell.opened} entr{hover.cell.opened === 1 ? "y" : "ies"}
+              </p>
+            </div>
           ) : (
-            <p className="text-zinc-500 dark:text-zinc-400">No activity</p>
+            <p className="mt-1 text-zinc-500 dark:text-zinc-400">No activity</p>
           )}
         </div>
       )}

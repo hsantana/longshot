@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import {
   DEFAULT_FILTERS,
-  bandDistribution,
+  bandBreakdown,
+  bestAndWorstPlays,
   calendarDays,
   categoryBreakdown,
   cumulativePnlSeries,
@@ -25,7 +26,8 @@ import Card from "@/components/Card";
 import FilterBar from "@/components/FilterBar";
 import LineChart from "@/components/charts/LineChart";
 import CalendarHeatmap from "@/components/charts/CalendarHeatmap";
-import BarList from "@/components/charts/BarList";
+import BreakdownCard from "@/components/BreakdownCard";
+import TopPlays from "@/components/TopPlays";
 import type { TrendPoint } from "@/lib/analytics";
 
 function TrendTile({
@@ -110,10 +112,20 @@ export default function PerformanceView({
     () => filterPositionPlays(positionPlays, filters, nowSec),
     [positionPlays, filters, nowSec]
   );
-  const bands = useMemo(() => bandDistribution(fPositionPlays), [fPositionPlays]);
+  const bands = useMemo(
+    () => bandBreakdown(fPositionPlays, fPlays, fTrades),
+    [fPositionPlays, fPlays, fTrades]
+  );
   // Markets is event-based (money moved in the window), so it agrees with the
   // PnL KPI — a position entered months ago but sold now still counts.
-  const markets = useMemo(() => categoryBreakdown(fPlays, fTrades), [fPlays, fTrades]);
+  const markets = useMemo(
+    () => categoryBreakdown(fPositionPlays, fPlays, fTrades),
+    [fPositionPlays, fPlays, fTrades]
+  );
+  const { best, worst } = useMemo(
+    () => bestAndWorstPlays(positionPlays, filters, nowSec),
+    [positionPlays, filters, nowSec]
+  );
 
   // Win rate is per exit (each sale/resolution), so it stays on the dated rows.
   const wr = winRate(fPlays);
@@ -177,35 +189,21 @@ export default function PerformanceView({
           <CalendarHeatmap days={days} startSec={startSec} nowSec={nowSec} />
         </Card>
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Card
-            title="Plays by probability band"
-            subtitle="Probability at entry · plays entered in this window"
-          >
-            <BarList
-              items={bands.map((b) => ({
-                label: b.label,
-                sublabel: b.range,
-                value: b.count,
-                display: String(b.count),
-                extra: b.count > 0 ? formatSignedUsd(b.pnl, true) : "",
-              }))}
-            />
-          </Card>
+        <BreakdownCard
+          title="Plays by probability band"
+          subtitle="Probability at entry"
+          labelHeader="Band"
+          rows={bands}
+        />
 
-          <Card title="Markets" subtitle="PnL and traded volume by category">
-            <BarList
-              mode="diverging"
-              columns={{ value: "PnL", extra: "Volume" }}
-              items={markets.map((c) => ({
-                label: c.label,
-                value: c.pnl,
-                display: formatSignedUsd(c.pnl, true),
-                extra: formatUsd(c.volume, true),
-              }))}
-            />
-          </Card>
-        </div>
+        <BreakdownCard
+          title="Markets"
+          subtitle="By category"
+          labelHeader="Category"
+          rows={markets}
+        />
+
+        <TopPlays best={best} worst={worst} />
 
         {tradesTruncated ? (
           <p className="text-xs text-amber-600 dark:text-amber-500">
