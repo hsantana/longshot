@@ -111,10 +111,9 @@ export default function PerformanceView({
     [positionPlays, filters, nowSec]
   );
   const bands = useMemo(() => bandDistribution(fPositionPlays), [fPositionPlays]);
-  const markets = useMemo(
-    () => categoryBreakdown(fPositionPlays, fTrades),
-    [fPositionPlays, fTrades]
-  );
+  // Markets is event-based (money moved in the window), so it agrees with the
+  // PnL KPI — a position entered months ago but sold now still counts.
+  const markets = useMemo(() => categoryBreakdown(fPlays, fTrades), [fPlays, fTrades]);
 
   // Win rate is per exit (each sale/resolution), so it stays on the dated rows.
   const wr = winRate(fPlays);

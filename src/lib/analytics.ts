@@ -392,9 +392,13 @@ export function bandDistribution(plays: PositionPlay[]): BandStat[] {
   });
 }
 
-/** PnL (per play) and traded volume (from trades) per market category. */
+/**
+ * PnL and traded volume per market category, both on an event basis — money
+ * that moved in the window, so selling out of a position entered months ago
+ * still counts here. This is what makes the card agree with the PnL KPI.
+ */
 export function categoryBreakdown(
-  plays: PositionPlay[],
+  plays: { category: string; pnl: number }[],
   trades: TradeLite[]
 ): { label: string; pnl: number; volume: number }[] {
   const map = new Map<string, { pnl: number; volume: number }>();
