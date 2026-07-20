@@ -124,16 +124,23 @@ export default function PortfolioView({
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_230px] lg:items-start">
       <div className="order-2 space-y-6 lg:order-1">
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {/* Cash is unknown when the RPC fails; show nothing rather than a
+              positions-only figure that would read as a complete total. */}
           <StatCard
-            label="Portfolio value"
-            value={formatUsd(summary.portfolioValue, true)}
-            hint="Open positions at current prices"
+            label="Portfolio"
+            value={cash === null ? "—" : formatUsd(summary.portfolioValue + cash, true)}
+            hint="Positions plus cash"
           />
           <StatCard
             label="Cash"
             value={cash === null ? "—" : formatUsd(cash, true)}
             hint="USDC in wallet"
+          />
+          <StatCard
+            label="Positions"
+            value={formatUsd(summary.portfolioValue, true)}
+            hint="Open positions at current prices"
           />
           <StatCard
             label="Unrealized PnL"

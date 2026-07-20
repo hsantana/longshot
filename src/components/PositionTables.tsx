@@ -83,6 +83,7 @@ function PositionsTable({ positions }: { positions: OpenPosition[] }) {
             <Th align="left">Market</Th>
             <Th>Shares</Th>
             <Th>Avg</Th>
+            <Th>Cost</Th>
             <Th>Now</Th>
             <Th>Value</Th>
             <Th>PnL</Th>
@@ -105,6 +106,10 @@ function PositionsTable({ positions }: { positions: OpenPosition[] }) {
               <td className={td}>{formatShares(p.size)}</td>
               <td className={`${td} text-zinc-500 dark:text-zinc-400`}>
                 {formatCents(p.avgPrice)}
+              </td>
+              {/* What was paid for the shares still held: size x avgPrice. */}
+              <td className={`${td} text-zinc-500 dark:text-zinc-400`}>
+                {formatUsd(p.initialValue)}
               </td>
               <td className={td}>{formatCents(p.curPrice)}</td>
               <td className={td}>{formatUsd(p.currentValue)}</td>
