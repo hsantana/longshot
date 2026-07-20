@@ -20,9 +20,11 @@ export default async function PerformancePage({
   return (
     <PerformanceView
       plays={dashboard.plays}
+      positionPlays={dashboard.positionPlays}
       trades={dashboard.trades}
       categories={dashboard.categories}
       truncated={dashboard.truncated}
+      tradesTruncated={dashboard.tradesTruncated}
     />
   );
 }

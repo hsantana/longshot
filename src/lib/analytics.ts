@@ -259,6 +259,118 @@ export function calendarDays(
   return days;
 }
 
+// ---------- Position-level plays ----------
+//
+// A *play* is a position you entered — one per asset — as opposed to the dated
+// cash events in `Play[]` (each sale/resolution), which drive the PnL line and
+// calendar. Plays are anchored on their entry date and counted once no matter
+// how many times you trimmed out of them.
+//
+// (Re-entering an asset after fully exiting is still folded into one play;
+// splitting those into separate plays is deliberately deferred.)
+
+export interface PositionPlay {
+  asset: string;
+  title: string;
+  eventSlug: string;
+  outcome: string;
+  category: string;
+  /** Weighted average buy price = probability at entry (0..1). */
+  entryPrice: number;
+  /** First BUY (unix seconds) — what the date filter matches on. */
+  entryTs: number;
+  staked: number;
+  /** Realized across every exit, plus unrealized on anything still held. */
+  pnl: number;
+  returned: number;
+  status: "open" | "closed";
+}
+
+/**
+ * Fold every position into one play per asset.
+ *
+ * `staked` comes from the open position when one remains (its `totalBought`
+ * already covers shares since sold); otherwise from the closed rows, which are
+ * disjoint — resolution rows cover only the shares still held at resolution,
+ * partial rows only the shares sold that day — so they sum without
+ * double-counting.
+ */
+export function toPositionPlays(
+  open: OpenPosition[],
+  closed: ClosedPosition[],
+  trades: Trade[],
+  categories: Map<string, string>
+): PositionPlay[] {
+  const firstBuy = new Map<string, number>();
+  for (const t of trades) {
+    if (t.side !== "BUY") continue;
+    const prev = firstBuy.get(t.asset);
+    if (prev === undefined || t.timestamp < prev) firstBuy.set(t.asset, t.timestamp);
+  }
+
+  const openByAsset = new Map(open.map((p) => [p.asset, p]));
+  const closedByAsset = new Map<string, ClosedPosition[]>();
+  for (const p of closed) {
+    const arr = closedByAsset.get(p.asset);
+    if (arr) arr.push(p);
+    else closedByAsset.set(p.asset, [p]);
+  }
+
+  const assets = new Set([...openByAsset.keys(), ...closedByAsset.keys()]);
+  const plays: PositionPlay[] = [];
+
+  for (const asset of assets) {
+    const o = openByAsset.get(asset);
+    const rows = closedByAsset.get(asset) ?? [];
+    const ref = o ?? rows[0];
+    if (!ref) continue;
+
+    const staked = o
+      ? o.totalBought * o.avgPrice
+      : rows.reduce((s, r) => s + r.totalBought * r.avgPrice, 0);
+    const pnl =
+      (o ? o.cashPnl : 0) + rows.reduce((s, r) => s + r.realizedPnl, 0);
+
+    // Without a BUY in the fetched window, fall back to the earliest event we
+    // do have so the play isn't silently dropped by the date filter.
+    const entryTs =
+      firstBuy.get(asset) ??
+      (rows.length > 0 ? Math.min(...rows.map((r) => r.timestamp)) : 0);
+
+    plays.push({
+      asset,
+      title: ref.title,
+      eventSlug: ref.eventSlug,
+      outcome: ref.outcome,
+      category: categories.get(ref.eventSlug) ?? "Other",
+      entryPrice: ref.avgPrice,
+      entryTs,
+      staked,
+      pnl,
+      returned: staked + pnl,
+      status: o ? "open" : "closed",
+    });
+  }
+
+  return plays;
+}
+
+export function filterPositionPlays(
+  plays: PositionPlay[],
+  filters: Filters,
+  nowSec: number
+): PositionPlay[] {
+  const start = windowStart(filters.dateKey, nowSec);
+  return plays.filter(
+    (p) =>
+      (filters.status === "all" || p.status === filters.status) &&
+      p.entryTs >= start &&
+      (filters.category === "all" || p.category === filters.category) &&
+      (filters.bands.length === 0 || filters.bands.includes(bandOf(p.entryPrice))) &&
+      sideMatches(filters.side, p.outcome)
+  );
+}
+
 export interface BandStat {
   key: BandKey;
   label: string;
@@ -267,7 +379,7 @@ export interface BandStat {
   pnl: number;
 }
 
-export function bandDistribution(plays: Play[]): BandStat[] {
+export function bandDistribution(plays: PositionPlay[]): BandStat[] {
   return BANDS.map((b) => {
     const inBand = plays.filter((p) => bandOf(p.entryPrice) === b.key);
     return {
@@ -280,9 +392,9 @@ export function bandDistribution(plays: Play[]): BandStat[] {
   });
 }
 
-/** PnL (from plays) and traded volume (from trades) per market category. */
+/** PnL (per play) and traded volume (from trades) per market category. */
 export function categoryBreakdown(
-  plays: Play[],
+  plays: PositionPlay[],
   trades: TradeLite[]
 ): { label: string; pnl: number; volume: number }[] {
   const map = new Map<string, { pnl: number; volume: number }>();
@@ -342,12 +454,15 @@ function weeklyBuckets(allPlays: Play[]): Map<number, Play[]> {
   return buckets;
 }
 
+/**
+ * Share of exits that were profitable — a hit rate, counted per exit (each
+ * sale and each resolution), not per play. Selling out of one position in
+ * three profitable waves counts as three winning exits.
+ */
 export function winRate(allPlays: Play[]): number | null {
-  // Partial sales are excluded: trimming a position isn't a separate win/loss,
-  // the position is scored once as a whole play when it fully closes.
-  const plays = allPlays.filter((p) => p.status === "closed" && !p.partial);
-  if (plays.length === 0) return null;
-  return plays.filter((p) => p.pnl > 0).length / plays.length;
+  const exits = allPlays.filter((p) => p.status === "closed");
+  if (exits.length === 0) return null;
+  return exits.filter((p) => p.pnl > 0).length / exits.length;
 }
 
 export function winRateTrend(plays: Play[]): TrendPoint[] {
@@ -356,14 +471,26 @@ export function winRateTrend(plays: Play[]): TrendPoint[] {
     .map(([ts, arr]) => ({ ts, value: (winRate(arr) ?? 0) * 100 }));
 }
 
-export function returnRatio(plays: Play[]): number | null {
+/**
+ * Dollars back per dollar staked, across whole positions — including the
+ * current value of anything still held, so an unsold winner still counts.
+ */
+export function returnRatio(plays: PositionPlay[]): number | null {
   const staked = plays.reduce((s, p) => s + p.staked, 0);
   if (staked === 0) return null;
   return plays.reduce((s, p) => s + p.returned, 0) / staked;
 }
 
-export function returnRatioTrend(plays: Play[]): TrendPoint[] {
-  return [...weeklyBuckets(plays).entries()]
+export function returnRatioTrend(plays: PositionPlay[]): TrendPoint[] {
+  const buckets = new Map<number, PositionPlay[]>();
+  for (const p of plays) {
+    if (p.entryTs <= 0) continue;
+    const week = Math.floor(p.entryTs / (7 * 86400)) * 7 * 86400;
+    const arr = buckets.get(week);
+    if (arr) arr.push(p);
+    else buckets.set(week, [p]);
+  }
+  return [...buckets.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([ts, arr]) => ({ ts, value: returnRatio(arr) ?? 0 }));
 }

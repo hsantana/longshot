@@ -9,16 +9,26 @@ import {
 import {
   toOpenPlays,
   toPlays,
+  toPositionPlays,
   toTradeLites,
   type Play,
+  type PositionPlay,
   type TradeLite,
 } from "./analytics";
 
+/** Matches the default cap in getTrades. */
+const TRADE_CAP = 3000;
+
 export interface Dashboard {
+  /** Dated cash events (each sale/resolution) — drives the PnL line + calendar. */
   plays: Play[];
+  /** One per position entered — drives bands, markets, return per $1. */
+  positionPlays: PositionPlay[];
   trades: TradeLite[];
   categories: string[];
   truncated: boolean;
+  /** Trade history hit the fetch cap, so older history is missing. */
+  tradesTruncated: boolean;
 }
 
 export const getDashboard = cache(
@@ -38,6 +48,12 @@ export const getDashboard = cache(
       ...toPlays(account.closedPositions, categories),
       ...toOpenPlays(account.openPositions, categories),
     ];
+    const positionPlays = toPositionPlays(
+      account.openPositions,
+      account.closedPositions,
+      trades,
+      categories
+    );
     const tradeLites = toTradeLites(trades, categories);
 
     const categoryList = [
@@ -46,9 +62,11 @@ export const getDashboard = cache(
 
     return {
       plays,
+      positionPlays,
       trades: tradeLites,
       categories: categoryList,
-      truncated: account.closedPositions.length >= 500 || trades.length >= 3000,
+      truncated: account.closedPositions.length >= 500 || trades.length >= TRADE_CAP,
+      tradesTruncated: trades.length >= TRADE_CAP,
     };
   }
 );

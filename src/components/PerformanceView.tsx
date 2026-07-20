@@ -8,6 +8,7 @@ import {
   categoryBreakdown,
   cumulativePnlSeries,
   filterPlays,
+  filterPositionPlays,
   filterTrades,
   returnRatio,
   returnRatioTrend,
@@ -16,6 +17,7 @@ import {
   winRateTrend,
   type Filters,
   type Play,
+  type PositionPlay,
   type TradeLite,
 } from "@/lib/analytics";
 import { formatSignedUsd, formatUsd, pnlColor } from "@/lib/format";
@@ -71,14 +73,18 @@ function TrendTile({
 
 export default function PerformanceView({
   plays,
+  positionPlays,
   trades,
   categories,
   truncated,
+  tradesTruncated,
 }: {
   plays: Play[];
+  positionPlays: PositionPlay[];
   trades: TradeLite[];
   categories: string[];
   truncated: boolean;
+  tradesTruncated: boolean;
 }) {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const nowSec = useMemo(() => Math.floor(Date.now() / 1000), []);
@@ -97,13 +103,24 @@ export default function PerformanceView({
     [fPlays, startSec, nowSec]
   );
   const days = useMemo(() => calendarDays(fPlays, fTrades), [fPlays, fTrades]);
-  const bands = useMemo(() => bandDistribution(fPlays), [fPlays]);
-  const markets = useMemo(() => categoryBreakdown(fPlays, fTrades), [fPlays, fTrades]);
 
+  // Plays are entry-anchored and counted once per position, so bands, markets
+  // and return-per-$1 read from them rather than from the dated cash events.
+  const fPositionPlays = useMemo(
+    () => filterPositionPlays(positionPlays, filters, nowSec),
+    [positionPlays, filters, nowSec]
+  );
+  const bands = useMemo(() => bandDistribution(fPositionPlays), [fPositionPlays]);
+  const markets = useMemo(
+    () => categoryBreakdown(fPositionPlays, fTrades),
+    [fPositionPlays, fTrades]
+  );
+
+  // Win rate is per exit (each sale/resolution), so it stays on the dated rows.
   const wr = winRate(fPlays);
   const wrTrend = useMemo(() => winRateTrend(fPlays), [fPlays]);
-  const rr = returnRatio(fPlays);
-  const rrTrend = useMemo(() => returnRatioTrend(fPlays), [fPlays]);
+  const rr = returnRatio(fPositionPlays);
+  const rrTrend = useMemo(() => returnRatioTrend(fPositionPlays), [fPositionPlays]);
 
   const totalPnl = fPlays.reduce((s, p) => s + p.pnl, 0);
 
@@ -127,7 +144,7 @@ export default function PerformanceView({
           />
           <TrendTile
             label="Win rate"
-            hint="Resolved wins ÷ resolved plays"
+            hint="Winning exits ÷ total exits"
             value={wr === null ? "—" : `${(wr * 100).toFixed(1)}%`}
             trend={wrTrend}
             formatValue={(v) => `${v.toFixed(0)}%`}
@@ -162,7 +179,10 @@ export default function PerformanceView({
         </Card>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Card title="Plays by probability band" subtitle="Probability at entry">
+          <Card
+            title="Plays by probability band"
+            subtitle="Probability at entry · plays entered in this window"
+          >
             <BarList
               items={bands.map((b) => ({
                 label: b.label,
@@ -188,11 +208,18 @@ export default function PerformanceView({
           </Card>
         </div>
 
-        {truncated && (
-          <p className="text-xs text-zinc-400">
-            Note: this account exceeds the fetch cap (500 closed positions / 3,000
-            trades); older history is not included.
+        {tradesTruncated ? (
+          <p className="text-xs text-amber-600 dark:text-amber-500">
+            Trade limit reached — showing the most recent 3,000 trades. Older
+            history is not included, so entry dates and totals may be incomplete.
           </p>
+        ) : (
+          truncated && (
+            <p className="text-xs text-zinc-400">
+              Note: this account exceeds the fetch cap (500 closed positions);
+              older history is not included.
+            </p>
+          )
         )}
       </div>
 

@@ -517,10 +517,10 @@ async function getAccountUncached(handle: string): Promise<
       asset: p.asset,
       conditionId: p.conditionId,
       avgPrice: p.avgPrice,
-      totalBought: p.totalBought,
-      // Only the outcome on the shares still held at resolution. Anything sold
-      // earlier is emitted separately by partialCloseRows, on its own sale
-      // date, so the two can't double-count.
+      // Only the shares still held at resolution, and only their outcome.
+      // Anything sold earlier is emitted separately by partialCloseRows on its
+      // own sale date, so the two rows stay disjoint and can't double-count.
+      totalBought: p.size,
       realizedPnl: p.cashPnl,
       curPrice: p.curPrice,
       title: p.title,
