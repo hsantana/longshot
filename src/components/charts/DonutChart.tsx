@@ -11,7 +11,7 @@ const COLORS = [
   { arc: "stroke-amber-500 dark:stroke-amber-400", dot: "bg-amber-500 dark:bg-amber-400" },
 ];
 
-const SIZE = 148;
+const SIZE = 176;
 const STROKE = 22;
 const R = (SIZE - STROKE) / 2;
 const C = 2 * Math.PI * R;
@@ -47,7 +47,7 @@ export default function DonutChart({
   const active = hover !== null ? arcs[hover] : null;
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex h-full flex-col items-center justify-center gap-5 py-2">
       <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
         <svg width={SIZE} height={SIZE} className="-rotate-90" role="img" aria-label="Composition">
           <circle

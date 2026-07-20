@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ClosedPosition, OpenPosition } from "@/lib/polymarket";
 import { allocationByPosition } from "@/lib/portfolio";
 import BarList from "@/components/charts/BarList";
+import ViewToggle, { type CardView } from "@/components/charts/ViewToggle";
 import {
   formatCents,
   formatDate,
@@ -203,71 +204,82 @@ export default function PositionTables({
   openPositions: OpenPosition[];
   closedPositions: ClosedPosition[];
 }) {
-  const [tab, setTab] = useState<"positions" | "closed" | "allocation">(
-    openPositions.length > 0 ? "positions" : "closed"
-  );
+  const [view, setView] = useState<CardView>("bar");
+  const [tab, setTab] = useState<"positions" | "closed">("positions");
 
-  // Allocation is a third view of the same open positions, rather than a
-  // separate card repeating them.
+  // The bars are a view of the same open positions the tables list, so both
+  // live in one card rather than repeating the data.
   const allocation = allocationByPosition(openPositions);
 
   return (
     <section className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center gap-1 border-b border-zinc-200 px-3 pt-3 dark:border-zinc-800">
-        {(
-          [
-            ["positions", `Positions (${openPositions.length})`],
-            ["closed", `Closed (${closedPositions.length})`],
-            ["allocation", "Allocation"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={`rounded-t-lg px-4 py-2.5 text-sm font-medium transition ${
-              tab === key
-                ? "border-b-2 border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100"
-                : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-        {tab === "closed" && closedPositions.length >= 100 && (
-          <span className="ml-auto px-4 text-xs text-zinc-400">
-            showing 100 most recent
-          </span>
-        )}
-        {tab === "allocation" && (
-          <span className="ml-auto px-4 text-xs text-zinc-400">
-            value now, marker at what was paid
-          </span>
-        )}
-      </div>
-      {tab === "positions" ? (
-        <PositionsTable positions={openPositions} />
-      ) : tab === "closed" ? (
-        <ClosedTable positions={closedPositions} />
-      ) : allocation.length === 0 ? (
-        <Empty label="No open positions." />
-      ) : (
-        <div className="p-4">
-          <BarList
-            items={allocation.map((a) => ({
-              key: a.key,
-              label: a.label,
-              sublabel: a.sublabel,
-              value: a.value,
-              display: formatUsd(a.value, true),
-              tone: a.tone,
-              reference: a.reference,
-              referenceLabel: a.reference
-                ? `Paid ${formatUsd(a.reference, true)}`
-                : undefined,
-            }))}
-          />
+      <div className="flex items-start justify-between gap-4 px-5 pt-5">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Allocation</h2>
+          <p className="mt-0.5 text-xs text-zinc-400">
+            {view === "bar"
+              ? "Value now, with a marker at what was paid"
+              : "Open and closed positions"}
+          </p>
         </div>
+        <ViewToggle view={view} onChange={setView} />
+      </div>
+
+      {view === "bar" ? (
+        allocation.length === 0 ? (
+          <Empty label="No open positions." />
+        ) : (
+          <div className="p-5 pt-4">
+            <BarList
+              items={allocation.map((a) => ({
+                key: a.key,
+                label: a.label,
+                sublabel: a.sublabel,
+                value: a.value,
+                display: formatUsd(a.value, true),
+                tone: a.tone,
+                reference: a.reference,
+                referenceLabel: a.reference
+                  ? `Paid ${formatUsd(a.reference, true)}`
+                  : undefined,
+              }))}
+            />
+          </div>
+        )
+      ) : (
+        <>
+          <div className="mt-4 flex items-center gap-1 border-b border-zinc-200 px-3 dark:border-zinc-800">
+            {(
+              [
+                ["positions", `Open (${openPositions.length})`],
+                ["closed", `Closed (${closedPositions.length})`],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
+                className={`rounded-t-lg px-4 py-2.5 text-sm font-medium transition ${
+                  tab === key
+                    ? "border-b-2 border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100"
+                    : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+            {tab === "closed" && closedPositions.length >= 100 && (
+              <span className="ml-auto px-4 text-xs text-zinc-400">
+                showing 100 most recent
+              </span>
+            )}
+          </div>
+          {tab === "positions" ? (
+            <PositionsTable positions={openPositions} />
+          ) : (
+            <ClosedTable positions={closedPositions} />
+          )}
+        </>
       )}
     </section>
   );
