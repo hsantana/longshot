@@ -9,7 +9,6 @@ import PositionTables from "@/components/PositionTables";
 import Card from "@/components/Card";
 import NetWorthChart from "@/components/charts/NetWorthChart";
 import DonutChart from "@/components/charts/DonutChart";
-import AllocationCard from "@/components/AllocationCard";
 import BarList from "@/components/charts/BarList";
 import ColumnChart from "@/components/charts/ColumnChart";
 import {
@@ -187,7 +186,7 @@ export default function PortfolioView({
               </p>
             )}
             {risk.atRisk > 0 && (
-              <p className="mt-3 border-t border-zinc-200 pt-3 text-xs text-zinc-400 dark:border-zinc-800">
+              <p className="mt-3 border-t border-zinc-200 pt-3 text-[13px] text-zinc-400 dark:border-zinc-800">
                 <span className="font-medium tabular-nums text-zinc-600 dark:text-zinc-300">
                   {money(risk.atRisk)}
                 </span>{" "}
@@ -220,8 +219,6 @@ export default function PortfolioView({
             )}
           </Card>
         </div>
-
-        <AllocationCard positions={filteredOpen} />
 
         {/* What risk am I carrying? */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

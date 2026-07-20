@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { ClosedPosition, OpenPosition } from "@/lib/polymarket";
+import { allocationByPosition } from "@/lib/portfolio";
+import BarList from "@/components/charts/BarList";
 import {
   formatCents,
   formatDate,
@@ -201,9 +203,13 @@ export default function PositionTables({
   openPositions: OpenPosition[];
   closedPositions: ClosedPosition[];
 }) {
-  const [tab, setTab] = useState<"positions" | "closed">(
+  const [tab, setTab] = useState<"positions" | "closed" | "allocation">(
     openPositions.length > 0 ? "positions" : "closed"
   );
+
+  // Allocation is a third view of the same open positions, rather than a
+  // separate card repeating them.
+  const allocation = allocationByPosition(openPositions);
 
   return (
     <section className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -212,6 +218,7 @@ export default function PositionTables({
           [
             ["positions", `Positions (${openPositions.length})`],
             ["closed", `Closed (${closedPositions.length})`],
+            ["allocation", "Allocation"],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -232,11 +239,35 @@ export default function PositionTables({
             showing 100 most recent
           </span>
         )}
+        {tab === "allocation" && (
+          <span className="ml-auto px-4 text-xs text-zinc-400">
+            value now, marker at what was paid
+          </span>
+        )}
       </div>
       {tab === "positions" ? (
         <PositionsTable positions={openPositions} />
-      ) : (
+      ) : tab === "closed" ? (
         <ClosedTable positions={closedPositions} />
+      ) : allocation.length === 0 ? (
+        <Empty label="No open positions." />
+      ) : (
+        <div className="p-4">
+          <BarList
+            items={allocation.map((a) => ({
+              key: a.key,
+              label: a.label,
+              sublabel: a.sublabel,
+              value: a.value,
+              display: formatUsd(a.value, true),
+              tone: a.tone,
+              reference: a.reference,
+              referenceLabel: a.reference
+                ? `Paid ${formatUsd(a.reference, true)}`
+                : undefined,
+            }))}
+          />
+        </div>
       )}
     </section>
   );
