@@ -14,6 +14,8 @@ export interface Slice {
   tone?: "positive" | "negative" | "neutral";
   /** Reference value drawn as a marker on the bar, e.g. cost basis. */
   reference?: number;
+  /** Compact label for axis use, where the full label is too long. */
+  shortLabel?: string;
 }
 
 export interface RiskReward {
@@ -103,14 +105,14 @@ const DAY_MS = 24 * HOUR_MS;
 // falls under. "Past due" catches markets whose end date has passed but which
 // haven't resolved yet; without it they'd be misreported as resolving today.
 const LADDER = [
-  { key: "overdue", label: "Past due", maxMs: 0 },
-  { key: "24h", label: "Next 24h", maxMs: DAY_MS },
-  { key: "week", label: "This week", maxMs: 7 * DAY_MS },
-  { key: "month", label: "This month", maxMs: 30 * DAY_MS },
-  { key: "q", label: "1–3 months", maxMs: 90 * DAY_MS },
-  { key: "h1", label: "3–6 months", maxMs: 180 * DAY_MS },
-  { key: "y1", label: "6–12 months", maxMs: 365 * DAY_MS },
-  { key: "beyond", label: "Over a year", maxMs: Infinity },
+  { key: "overdue", label: "Past due", short: "due", maxMs: 0 },
+  { key: "24h", label: "Next 24h", short: "24h", maxMs: DAY_MS },
+  { key: "week", label: "This week", short: "1w", maxMs: 7 * DAY_MS },
+  { key: "month", label: "This month", short: "1m", maxMs: 30 * DAY_MS },
+  { key: "q", label: "1–3 months", short: "3m", maxMs: 90 * DAY_MS },
+  { key: "h1", label: "3–6 months", short: "6m", maxMs: 180 * DAY_MS },
+  { key: "y1", label: "6–12 months", short: "1y", maxMs: 365 * DAY_MS },
+  { key: "beyond", label: "Over a year", short: "1y+", maxMs: Infinity },
 ] as const;
 
 /**
@@ -133,6 +135,7 @@ export function resolutionLadder(
     (b) => ({
       key: b.key,
       label: b.label,
+      shortLabel: b.short,
       value: totals.get(b.key) ?? 0,
     })
   );

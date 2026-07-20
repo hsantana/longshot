@@ -10,6 +10,7 @@ import Card from "@/components/Card";
 import NetWorthChart from "@/components/charts/NetWorthChart";
 import DonutChart from "@/components/charts/DonutChart";
 import BarList from "@/components/charts/BarList";
+import ColumnChart from "@/components/charts/ColumnChart";
 import {
   allocationByPosition,
   cashVsDeployed,
@@ -243,14 +244,7 @@ export default function PortfolioView({
         {/* What risk am I carrying? */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <Card title="Time to resolution" subtitle="When this capital frees up">
-            <BarList
-              items={ladder.map((s) => ({
-                key: s.key,
-                label: s.label,
-                value: s.value,
-                display: money(s.value),
-              }))}
-            />
+            <ColumnChart items={ladder} formatValue={money} />
           </Card>
 
           <Card title="Exposure by probability band" subtitle="Probability at entry">
