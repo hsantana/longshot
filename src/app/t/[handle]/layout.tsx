@@ -1,9 +1,6 @@
-import Link from "next/link";
 import type { Metadata } from "next";
-import SearchBox from "@/components/SearchBox";
-import Wordmark from "@/components/Wordmark";
-import TabNav from "@/components/TabNav";
-import ThemeToggle from "@/components/ThemeToggle";
+import AppHeader from "@/components/AppHeader";
+import SectionNav from "@/components/SectionNav";
 import { getAccount } from "@/lib/polymarket";
 import { shortAddress } from "@/lib/format";
 import { BRAND } from "@/config/brand";
@@ -37,16 +34,7 @@ export default async function TrackerLayout({
 
   return (
     <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-8">
-      <header className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
-        <Link href="/" className="shrink-0 sm:flex-1">
-          <Wordmark className="h-[53px]" />
-        </Link>
-        <div className="w-full sm:max-w-md">
-          <SearchBox compact />
-        </div>
-        <div className="hidden sm:block sm:flex-1" />
-        <ThemeToggle className="absolute right-0 top-0" />
-      </header>
+      <AppHeader />
 
       {!account ? (
         <div className="mt-24 text-center">
@@ -61,7 +49,7 @@ export default async function TrackerLayout({
         </div>
       ) : (
         <div className="mt-8 lg:grid lg:grid-cols-[150px_minmax(0,1fr)] lg:items-start lg:gap-8">
-          <TabNav handle={handle} />
+          <SectionNav handle={handle} />
           <div className="mt-6 lg:mt-0">
             <section className="flex items-center gap-4">
               {account.summary.profileImage ? (
