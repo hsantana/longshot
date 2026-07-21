@@ -231,6 +231,7 @@ export default function PositionTables({
         ) : (
           <div className="p-5 pt-4">
             <BarList
+              labelWidth="w-64"
               items={allocation.map((a) => ({
                 key: a.key,
                 label: a.label,
