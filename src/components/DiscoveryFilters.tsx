@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { CANONICAL_CATEGORIES } from "@/lib/categories";
 import {
   CHANCE_PRESETS,
   DATE_RANGES,
+  PRIMARY_CATEGORIES,
   VOLUME_STOPS,
   type DiscoveryFilters,
 } from "@/lib/discovery";
@@ -20,13 +22,46 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden="true"
+    >
+      <path d="M3 4.5 6 7.5 9 4.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="m10.5 10.5 3 3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Vertical filter rail (sidebar on desktop, stacked block on mobile). */
 export default function DiscoveryFilters({
   filters,
   onChange,
+  onSearch,
+  fetching,
+  stale,
 }: {
   filters: DiscoveryFilters;
   onChange: (f: DiscoveryFilters) => void;
+  onSearch: () => void;
+  fetching: boolean;
+  stale: boolean;
 }) {
+  const [showAllCategories, setShowAllCategories] = useState(false);
+
   const volumeIndex = Math.max(
     0,
     VOLUME_STOPS.findIndex((s) => s.value === filters.minVolume)
@@ -40,12 +75,36 @@ export default function DiscoveryFilters({
   }
 
   const allSelected = filters.categories.length === CANONICAL_CATEGORIES.length;
+  const shownCategories = showAllCategories
+    ? CANONICAL_CATEGORIES
+    : PRIMARY_CATEGORIES;
+  const hiddenCount = CANONICAL_CATEGORIES.length - PRIMARY_CATEGORIES.length;
 
   return (
-    <div className="grid gap-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 lg:grid-cols-2">
-      {/* Minimum winning chance */}
+    <div className="space-y-5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="space-y-1.5">
+        <button
+          type="button"
+          onClick={onSearch}
+          disabled={fetching}
+          className={`flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition disabled:opacity-60 ${
+            stale
+              ? "bg-blue-600 text-white hover:bg-blue-500"
+              : "bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+          }`}
+        >
+          <SearchIcon />
+          {fetching ? "Searching…" : "Search"}
+        </button>
+        {stale && !fetching && (
+          <p className="text-center text-[11px] text-blue-600 dark:text-blue-400">
+            Filters changed — search to pull a matching batch.
+          </p>
+        )}
+      </div>
+
       <Group label="Minimum winning chance">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <input
             type="range"
             min={1}
@@ -55,10 +114,10 @@ export default function DiscoveryFilters({
             onChange={(e) =>
               onChange({ ...filters, minChancePct: Number(e.target.value) })
             }
-            className="w-full accent-zinc-900 dark:accent-zinc-100"
+            className="w-full min-w-0 accent-zinc-900 dark:accent-zinc-100"
             aria-label="Minimum winning chance"
           />
-          <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums">
+          <span className="w-9 shrink-0 text-right text-sm font-semibold tabular-nums">
             {filters.minChancePct}%
           </span>
         </div>
@@ -76,7 +135,26 @@ export default function DiscoveryFilters({
         </div>
       </Group>
 
-      {/* Closes within */}
+      <Group label="Near-certain (99.9%+)">
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange({ ...filters, hideDecided: true })}
+            className={chip(filters.hideDecided)}
+            title="Hide outcomes already decided but pending settlement"
+          >
+            Hide
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ ...filters, hideDecided: false })}
+            className={chip(!filters.hideDecided)}
+          >
+            Show
+          </button>
+        </div>
+      </Group>
+
       <Group label="Closes within">
         <div className="flex flex-wrap gap-1.5">
           {DATE_RANGES.map((r) => (
@@ -90,14 +168,10 @@ export default function DiscoveryFilters({
             </button>
           ))}
         </div>
-        <p className="text-xs text-zinc-400">
-          Longer windows reload the list from Polymarket.
-        </p>
       </Group>
 
-      {/* 24h volume */}
       <Group label="Minimum 24h volume">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <input
             type="range"
             min={0}
@@ -110,16 +184,15 @@ export default function DiscoveryFilters({
                 minVolume: VOLUME_STOPS[Number(e.target.value)].value,
               })
             }
-            className="w-full accent-zinc-900 dark:accent-zinc-100"
+            className="w-full min-w-0 accent-zinc-900 dark:accent-zinc-100"
             aria-label="Minimum 24h volume"
           />
-          <span className="w-14 shrink-0 text-right text-sm font-semibold tabular-nums">
+          <span className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums">
             {VOLUME_STOPS[volumeIndex].label}
           </span>
         </div>
       </Group>
 
-      {/* Category */}
       <Group label="Category">
         <div className="flex flex-wrap gap-1.5">
           <button
@@ -134,7 +207,7 @@ export default function DiscoveryFilters({
           >
             All
           </button>
-          {CANONICAL_CATEGORIES.map((c) => (
+          {shownCategories.map((c) => (
             <button
               key={c}
               type="button"
@@ -144,6 +217,15 @@ export default function DiscoveryFilters({
               {c}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setShowAllCategories((v) => !v)}
+            className={`${chip(false)} inline-flex items-center gap-1`}
+            aria-expanded={showAllCategories}
+          >
+            {showAllCategories ? "Less" : `+${hiddenCount} more`}
+            <Chevron open={showAllCategories} />
+          </button>
         </div>
       </Group>
     </div>

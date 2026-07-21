@@ -3,6 +3,7 @@
 
 import { cache } from "react";
 import { CANONICAL_CATEGORIES } from "./categories";
+const CANONICAL_SET = new Set<string>(CANONICAL_CATEGORIES);
 import { rangeWindow, type DiscoveryMarket, type RangeKey } from "./discovery";
 
 const DATA_API = "https://data-api.polymarket.com";
@@ -314,8 +315,13 @@ export async function getCategories(
           { slug: string; tags?: { label: string }[] }[]
         >(`${GAMMA_API}/events?${qs}`);
         for (const ev of events) {
-          const labels = (ev.tags ?? []).map((t) => t.label);
-          const match = CANONICAL_CATEGORIES.find((c) => labels.includes(c));
+          // Polymarket orders an event's tags most-specific-first, so walk the
+          // event's own tag order and take the first canonical one. Walking our
+          // fixed list instead would collapse, e.g., an esports match tagged
+          // both "Esports" and "Sports" to the broader "Sports".
+          const match = (ev.tags ?? [])
+            .map((t) => t.label)
+            .find((label) => CANONICAL_SET.has(label));
           categoryCache.set(ev.slug, match ?? "Other");
         }
       } catch {
@@ -549,9 +555,9 @@ async function getAccountUncached(handle: string): Promise<
 // client-side by "% per day". See src/lib/discovery.ts for the scoring.
 // ---------------------------------------------------------------------------
 
-// Gamma caps a page at 100; five parallel pages give us the 500 candidate cap.
+// Gamma caps a page at 100; parallel pages give us the candidate cap.
 const DISCOVERY_PAGE = 100;
-const DISCOVERY_PAGES = 5;
+const DISCOVERY_PAGES = 15; // 1,500 candidates
 
 interface GammaMarket {
   conditionId?: string;
@@ -577,14 +583,19 @@ function parseJsonArray(raw: string | undefined): string[] {
 
 /**
  * Active markets closing within the given range, ordered by 24h volume (most
- * traded first) so the 500-candidate cap keeps the tradeable markets. Category
- * is resolved from event tags; scoring/filtering happens client-side.
+ * traded first) so the candidate cap keeps the tradeable markets. Optionally
+ * scoped to Polymarket `tagIds` (OR'd) so a narrowed category selection fetches
+ * a batch of those markets rather than the top-by-volume across everything.
+ * Category is resolved from event tags; scoring/filtering happens client-side.
  */
 export async function getDiscoveryMarkets(
-  range: RangeKey
+  range: RangeKey,
+  tagIds: number[] = []
 ): Promise<DiscoveryMarket[]> {
   const { minDays, maxDays } = rangeWindow(range);
-  const now = Date.now();
+  // Round the window to the minute so repeated queries share a URL and hit
+  // Gamma's own 5-minute CDN cache instead of missing on every call.
+  const now = Math.floor(Date.now() / 60_000) * 60_000;
   const min = new Date(now + minDays * 86_400_000).toISOString();
   const max = new Date(now + maxDays * 86_400_000).toISOString();
 
@@ -600,6 +611,8 @@ export async function getDiscoveryMarkets(
         end_date_min: min,
         end_date_max: max,
       });
+      // Multiple tag_id params OR together on Gamma's side.
+      for (const id of tagIds) qs.append("tag_id", String(id));
       return getJSON<GammaMarket[]>(`${GAMMA_API}/markets?${qs}`).catch(
         () => [] as GammaMarket[]
       );

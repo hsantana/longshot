@@ -12,6 +12,9 @@ const MINUTE_IN_DAYS = 1 / 1440;
 
 /** Time-to-close ranges. Each is a window measured in days from now. */
 export const DATE_RANGES = [
+  { key: "24h", label: "< 24 hours", minDays: 0, maxDays: 1 },
+  { key: "2d", label: "< 2 days", minDays: 0, maxDays: 2 },
+  { key: "5d", label: "< 5 days", minDays: 0, maxDays: 5 },
   { key: "week", label: "< 1 week", minDays: 0, maxDays: 7 },
   { key: "month", label: "< 1 month", minDays: 0, maxDays: 30 },
   { key: "6month", label: "1–6 months", minDays: 30, maxDays: 180 },
@@ -36,7 +39,19 @@ export const VOLUME_STOPS = [
 /** Preset shortcuts under the minimum-chance slider. */
 export const CHANCE_PRESETS = [25, 50, 75, 90, 95, 99] as const;
 
+/** Categories shown by default; the rest are behind an expand toggle. */
+export const PRIMARY_CATEGORIES = ["Politics", "Crypto", "Sports"] as const;
+
 export const MAX_ROWS = 100;
+
+/**
+ * Outcomes priced at/beyond this chance (or its inverse) are treated as
+ * decided / in review — the event is effectively over and the price is pinned,
+ * pending on-chain settlement. Polymarket keeps these markets open (active,
+ * accepting orders, future endDate), so there's no way to exclude them at the
+ * API request; we drop them here. 0.999 catches the ~0.9995 pinned prices.
+ */
+export const DECIDED_CHANCE = 0.999;
 
 export interface DiscoveryFilters {
   /** Minimum winning chance, as a whole percent (1..99). */
@@ -46,6 +61,8 @@ export interface DiscoveryFilters {
   categories: string[];
   /** Minimum 24h volume in dollars. */
   minVolume: number;
+  /** Hide decided / in-review outcomes pinned at ~99.9%+ (on by default). */
+  hideDecided: boolean;
 }
 
 export const DEFAULT_FILTERS: DiscoveryFilters = {
@@ -53,6 +70,7 @@ export const DEFAULT_FILTERS: DiscoveryFilters = {
   range: "week",
   categories: [...CANONICAL_CATEGORIES],
   minVolume: 1_000,
+  hideDecided: true,
 };
 
 /** A market as returned by the API, one per Polymarket market. */
@@ -134,6 +152,11 @@ export function rankRows(
   const rows: OutcomeRow[] = [];
   for (const market of markets) {
     for (const row of toRows(market, now)) {
+      if (
+        filters.hideDecided &&
+        (row.price >= DECIDED_CHANCE || row.price <= 1 - DECIDED_CHANCE)
+      )
+        continue;
       if (row.price * 100 < filters.minChancePct) continue;
       if (row.daysLeft < minDays || row.daysLeft > maxDays) continue;
       if (catSet && !catSet.has(row.category)) continue;
