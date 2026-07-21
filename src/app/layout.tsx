@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { BRAND } from "@/config/brand";
 import Footer from "@/components/Footer";
 import ThemeSync from "@/components/ThemeSync";
+import { PostHogProvider } from "@/components/PostHogProvider";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import favicon16 from "../../brand/longshot-favicon-16.png";
 import favicon32 from "../../brand/longshot-favicon-32.png";
@@ -50,9 +51,11 @@ export default function RootLayout({
         </Script>
       </head>
       <body className="min-h-full flex flex-col">
-        <ThemeSync />
-        {children}
-        <Footer />
+        <PostHogProvider>
+          <ThemeSync />
+          {children}
+          <Footer />
+        </PostHogProvider>
       </body>
     </html>
   );

@@ -23,6 +23,26 @@ npm run dev
 
 Open http://localhost:3000. No environment variables or secrets are required.
 
+### Analytics (optional)
+
+Longshot supports [PostHog](https://posthog.com) product analytics. It's fully
+optional — with no key configured, the tracking code is a no-op and nothing is
+sent. To enable it, copy `.env.example` to `.env.local` and set your own
+project's values:
+
+```bash
+cp .env.example .env.local
+# then edit .env.local:
+#   NEXT_PUBLIC_POSTHOG_KEY=phc_your_project_key
+#   NEXT_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
+```
+
+`.env.local` is gitignored and must not be committed. The `NEXT_PUBLIC_*` values
+are inlined at build time, so they need to be present in the environment where
+`npm run deploy` builds (not only as a Cloudflare Worker runtime variable). The
+project API key (`phc_...`) is safe to ship in the browser; never commit a
+Personal API key (`phx_...`).
+
 ## Self-hosting
 
 The app deploys anywhere Next.js runs. The included config targets Cloudflare Workers via [OpenNext](https://opennext.js.org/cloudflare):
