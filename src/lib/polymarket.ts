@@ -2,6 +2,8 @@
 // No API key required. Endpoint shapes verified 2026-07.
 
 import { cache } from "react";
+import { CANONICAL_CATEGORIES } from "./categories";
+import { rangeWindow, type DiscoveryMarket, type RangeKey } from "./discovery";
 
 const DATA_API = "https://data-api.polymarket.com";
 const GAMMA_API = "https://gamma-api.polymarket.com";
@@ -284,31 +286,6 @@ export async function getUsdcBalance(address: string): Promise<number | null> {
   }
 }
 
-// Polymarket models "category" as event tags; match against the site's
-// top-level categories, first hit wins.
-const CANONICAL_CATEGORIES = [
-  "Politics",
-  "Elections",
-  "Geopolitics",
-  "Sports",
-  "Esports",
-  "Crypto",
-  "Finance",
-  "Business",
-  "Economy",
-  "Earnings",
-  "Tech",
-  "Science",
-  "AI",
-  "Culture",
-  "Pop Culture",
-  "Entertainment",
-  "Music",
-  "Movies",
-  "Weather",
-  "World",
-  "Health",
-];
 
 // Per-isolate cache: event slug -> category. Event tags are effectively
 // immutable, so entries never need invalidating.
@@ -565,6 +542,110 @@ async function getAccountUncached(handle: string): Promise<
     openPositions,
     closedPositions,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Discovery screener: enumerate active markets closing within a window, ranked
+// client-side by "% per day". See src/lib/discovery.ts for the scoring.
+// ---------------------------------------------------------------------------
+
+// Gamma caps a page at 100; five parallel pages give us the 500 candidate cap.
+const DISCOVERY_PAGE = 100;
+const DISCOVERY_PAGES = 5;
+
+interface GammaMarket {
+  conditionId?: string;
+  question?: string;
+  slug?: string;
+  outcomes?: string;
+  outcomePrices?: string;
+  endDate?: string;
+  volume24hr?: number;
+  liquidityNum?: number;
+  events?: { slug?: string }[];
+}
+
+function parseJsonArray(raw: string | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Active markets closing within the given range, ordered by 24h volume (most
+ * traded first) so the 500-candidate cap keeps the tradeable markets. Category
+ * is resolved from event tags; scoring/filtering happens client-side.
+ */
+export async function getDiscoveryMarkets(
+  range: RangeKey
+): Promise<DiscoveryMarket[]> {
+  const { minDays, maxDays } = rangeWindow(range);
+  const now = Date.now();
+  const min = new Date(now + minDays * 86_400_000).toISOString();
+  const max = new Date(now + maxDays * 86_400_000).toISOString();
+
+  const pages = await Promise.all(
+    Array.from({ length: DISCOVERY_PAGES }, (_, i) => {
+      const qs = new URLSearchParams({
+        active: "true",
+        closed: "false",
+        limit: String(DISCOVERY_PAGE),
+        offset: String(i * DISCOVERY_PAGE),
+        order: "volume24hr",
+        ascending: "false",
+        end_date_min: min,
+        end_date_max: max,
+      });
+      return getJSON<GammaMarket[]>(`${GAMMA_API}/markets?${qs}`).catch(
+        () => [] as GammaMarket[]
+      );
+    })
+  );
+
+  // Parallel offset pages can overlap if volume shifts mid-fetch; dedupe by
+  // the market's unique id so a market never yields duplicate rows/keys.
+  const seen = new Set<string>();
+  const raw = pages.flat().filter((m) => {
+    const id = m.conditionId ?? m.slug;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  const categories = await getCategories(
+    raw.map((m) => m.events?.[0]?.slug ?? m.slug ?? "").filter(Boolean),
+    DISCOVERY_PAGE * DISCOVERY_PAGES
+  );
+
+  const markets: DiscoveryMarket[] = [];
+  for (const m of raw) {
+    const eventSlug = m.events?.[0]?.slug ?? m.slug;
+    const id = m.conditionId ?? m.slug;
+    const closeMs = m.endDate ? Date.parse(m.endDate) : NaN;
+    if (!id || !eventSlug || !m.question || Number.isNaN(closeMs)) continue;
+
+    const outcomes = parseJsonArray(m.outcomes);
+    const prices = parseJsonArray(m.outcomePrices).map(Number);
+    if (outcomes.length === 0 || prices.length === 0) continue;
+
+    markets.push({
+      id,
+      question: m.question,
+      eventSlug,
+      category: categories.get(eventSlug) ?? "Other",
+      closeMs,
+      volume24hr: m.volume24hr ?? 0,
+      liquidity: m.liquidityNum ?? 0,
+      outcomes,
+      prices,
+      url: `https://polymarket.com/event/${eventSlug}`,
+    });
+  }
+  return markets;
 }
 
 // React request-level cache: layout and page(s) in the same request share one
